@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
         const fs = require('fs');
         const path = require('path');
-        const sessionFile = path.join(process.cwd(), 'session.json');
+        const sessionFile = path.join('/tmp', 'session.json');
 
         let activeGc: any = null;
         let sessionLoaded = false;
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         const cacheUserKey = email || 'session_user';
 
         // --- CACHING STRATEGY ---
-        const cacheFile = path.join(process.cwd(), 'garmin-cache.json');
+        const cacheFile = path.join('/tmp', 'garmin-cache.json');
         const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
         let cachedData: any = {};
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
 
         // DEBUG: Save raw data to file to inspect structure
         try {
-            fs.writeFileSync(path.join(process.cwd(), 'garmin-debug.json'), JSON.stringify({
+            fs.writeFileSync(path.join('/tmp', 'garmin-debug.json'), JSON.stringify({
                 userProfile,
                 userSettings
             }, null, 2));
