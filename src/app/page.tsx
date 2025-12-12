@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Activity, RotateCcw, Footprints, Loader2, Download, Heart, Moon,
   User, Database, Zap, Flame, Timer, TrendingUp, Calendar, MapPin,
-  Battery, HelpCircle, ChevronRight
+  Battery, HelpCircle, ChevronRight, Play
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import garminCache from '../../garmin-cache.json';
@@ -881,6 +881,15 @@ export default function Home() {
             document.body.appendChild(notif);
           }} className="btn-secondary text-sm !px-3" title="Voir l'aperçu JSON">
             <Database className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => router.push('/training')}
+            className="btn-primary animate-pulse shadow-lg shadow-green-500/20 flex items-center gap-2 px-4 bg-green-600 hover:bg-green-500 border-green-500"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            <span className="hidden sm:inline">Lancer mon entraînement</span>
+            <span className="sm:hidden">Go</span>
           </button>
 
           <button onClick={refresh} className="btn-secondary !aspect-square !px-0 w-12" disabled={loading}>
