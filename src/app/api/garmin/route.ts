@@ -1,6 +1,29 @@
 import { NextResponse } from 'next/server';
 import { GarminConnect } from 'garmin-connect';
 
+// --- PROXY CONFIGURATION START ---
+// Usually, we should configure this only once, but Next.js routes are tricky.
+// We'll check if PROXY_URL is set and if global-agent is already active.
+// Note: 'garmin-connect' uses 'axios' or similar http clients under the hood. 
+// 'global-agent' helps to intercept http/https requests globally.
+if (process.env.PROXY_URL) {
+    try {
+        const { bootstrap } = require('global-agent');
+
+        // Only bootstrap if not already configured (though safe to call multiple times generally)
+        if (!(global as any).GLOBAL_AGENT) {
+            console.log("Initializing Global Proxy Agent with:", process.env.PROXY_URL.replace(/:[^:]*@/, ':***@')); // Hide password in logs
+            process.env.GLOBAL_AGENT_HTTP_PROXY = process.env.PROXY_URL;
+            process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.PROXY_URL;
+            bootstrap();
+        }
+    } catch (e) {
+        console.error("Failed to initialize proxy agent:", e);
+    }
+}
+// --- PROXY CONFIGURATION END ---
+
+
 // ... imports remain the same
 // ... imports remain the same
 export async function POST(request: Request) {

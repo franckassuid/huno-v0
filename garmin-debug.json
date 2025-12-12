@@ -131,7 +131,7 @@
         "sortOrder": 3,
         "isPossibleFirstDay": true
       },
-      "vo2MaxRunning": 44,
+      "vo2MaxRunning": 43,
       "vo2MaxCycling": null,
       "lactateThresholdSpeed": null,
       "lactateThresholdHeartRate": null,
@@ -177,17 +177,17 @@
       "golfSpeedUnit": null,
       "externalBottomTime": 541320,
       "availableTrainingDays": [
-        "TUESDAY",
-        "FRIDAY",
-        "SATURDAY",
-        "THURSDAY",
-        "SUNDAY",
+        "WEDNESDAY",
         "MONDAY",
-        "WEDNESDAY"
+        "TUESDAY",
+        "SUNDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY"
       ],
       "preferredLongTrainingDays": [
-        "SATURDAY",
-        "SUNDAY"
+        "SUNDAY",
+        "SATURDAY"
       ],
       "virtualCaddieDataSource": null,
       "numberDivesAutomatically": null
