@@ -17,6 +17,21 @@ if (process.env.PROXY_URL) {
             process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.PROXY_URL;
             bootstrap();
         }
+
+        // DEBUG: Check IP
+        try {
+            // We use 'http' via global-agent (which intercepts http.request)
+            // But simple fetch might bypass it if using Undici/native fetch in Node 18+
+            // To be sure, we'll try to use a basic fetch and see if global-agent catches it
+            // OR we rely on GarmiConnect logic.
+            // Let's just try to fetch a public IP service.
+            console.log("DEBUG: Checking outgoing IP...");
+            const ipRes = await fetch('https://api.ipify.org?format=json');
+            const ipJson = await ipRes.json();
+            console.log("DEBUG: Current Server IP is:", ipJson.ip);
+        } catch (e) {
+            console.error("DEBUG: Failed to check IP:", e);
+        }
     } catch (e) {
         console.error("Failed to initialize proxy agent:", e);
     }
