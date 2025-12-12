@@ -1,23 +1,20 @@
-```typescript
 import { NextResponse } from 'next/server';
 import { GarminConnect } from 'garmin-connect';
 
 // --- PROXY CONFIGURATION START ---
-const HARDCODED_PROXY = "http://citfzumb-1:4a1mbm7tzk60@p.webshare.io:80/";
-
 // Usually, we should configure this only once, but Next.js routes are tricky.
 // We'll check if PROXY_URL is set and if global-agent is already active.
 // Note: 'garmin-connect' uses 'axios' or similar http clients under the hood. 
 // 'global-agent' helps to intercept http/https requests globally.
-if (true) { // Force execution
+if (process.env.PROXY_URL) {
     try {
         const { bootstrap } = require('global-agent');
 
         // Only bootstrap if not already configured (though safe to call multiple times generally)
         if (!(global as any).GLOBAL_AGENT) {
-            console.log("Initializing Global Proxy Agent with HARDCODED URL"); 
-            process.env.GLOBAL_AGENT_HTTP_PROXY = HARDCODED_PROXY;
-            process.env.GLOBAL_AGENT_HTTPS_PROXY = HARDCODED_PROXY;
+            console.log("Initializing Global Proxy Agent with:", process.env.PROXY_URL.replace(/:[^:]*@/, ':***@')); // Hide password in logs
+            process.env.GLOBAL_AGENT_HTTP_PROXY = process.env.PROXY_URL;
+            process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.PROXY_URL;
             bootstrap();
         }
 
@@ -122,7 +119,7 @@ export async function POST(request: Request) {
             } catch (e) { }
         }
 
-        const cacheKey = `${ cacheUserKey } -${ todayStr } `;
+        const cacheKey = `${cacheUserKey} -${todayStr} `;
         const userCache = cachedData[cacheKey];
 
         if (userCache && (Date.now() - userCache.timestamp < CACHE_DURATION)) {
@@ -163,128 +160,128 @@ export async function POST(request: Request) {
             // @ts-ignore
             vo2MaxData = await gcToUse.client.get(`https://connect.garmin.com/metrics-service/metrics/maxmet/daily/${todayStr}/${todayStr}`);
         } catch (e) { }
-await sleep(500);
+        await sleep(500);
 
-// Fitness Age
-let fitnessData = null;
-try {
-    // @ts-ignore
-    fitnessData = await gcToUse.client.get(`https://connect.garmin.com/metrics-service/metrics/fitnessage/latest`);
-} catch (e) { }
-await sleep(500);
+        // Fitness Age
+        let fitnessData = null;
+        try {
+            // @ts-ignore
+            fitnessData = await gcToUse.client.get(`https://connect.garmin.com/metrics-service/metrics/fitnessage/latest`);
+        } catch (e) { }
+        await sleep(500);
 
-// Heart Rate
-// @ts-ignore
-const heartRate = await gcToUse.getHeartRate(today);
-await sleep(500);
-
-// Activities
-const activities = await gcToUse.getActivities(0, 5);
-await sleep(500);
-
-// --- 3. SOMMEIL ---
-// @ts-ignore
-const sleepData = await gcToUse.getSleepData(today);
-await sleep(500);
-
-// --- 4. WELLNESS ---
-// Body Battery
-let bodyBattery = null;
-try {
-    // @ts-ignore
-    bodyBattery = await gcToUse.client.get(`https://connect.garmin.com/wellness-service/wellness/dailyBodyBattery/${todayStr}/${todayStr}`);
-} catch (e) { }
-await sleep(500);
-
-// Stress
-let stress = null;
-try {
-    // @ts-ignore
-    stress = await gcToUse.client.get(`https://connect.garmin.com/wellness-service/wellness/dailyStress/${todayStr}/${todayStr}`);
-} catch (e) { }
-await sleep(300);
-
-// HRV
-let hrvStatus = null;
-try {
-    // @ts-ignore
-    hrvStatus = await gcToUse.client.get(`https://connect.garmin.com/hrv-service/hrv/daily/${todayStr}/${todayStr}`);
-} catch (e) { }
-await sleep(300);
-
-// --- 5. LIFESTYLE ---
-// Daily Summary
-let dailySummary = null;
-try {
-    // @ts-ignore
-    const summaries = await gcToUse.client.get(`https://connect.garmin.com/usersummary-service/usersummary/daily/${todayStr}/${todayStr}`);
-    if (Array.isArray(summaries) && summaries.length > 0) {
-        dailySummary = summaries[0];
-    }
-} catch (e) { }
-
-// Helper to calculate age from birthDate
-const calculateAge = (birthDate: string) => {
-    if (!birthDate) return null;
-    const diff = Date.now() - new Date(birthDate).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-};
-
-const responseData = {
-    success: true,
-    profile: {
-        ...userProfile,
+        // Heart Rate
         // @ts-ignore
-        weight: userSettings?.userData?.weight, // grams based on debug file
-        // @ts-ignore
-        height: userSettings?.userData?.height, // cm
-        // @ts-ignore
-        age: calculateAge(userSettings?.userData?.birthDate),
-    },
-    cardio: {
-        // @ts-ignore
-        vo2Max: vo2MaxData || (userSettings?.userData?.vo2MaxRunning ? [{ vo2MaxPrecise: userSettings.userData.vo2MaxRunning }] : null),
-        fitnessAge: fitnessData,
-        heartRate: heartRate,
-        activities: activities
-    },
-    sleep: sleepData,
-    wellness: {
-        bodyBattery,
-        stress,
-        hrv: hrvStatus
-    },
-    lifestyle: {
-        summary: dailySummary
-    }
-};
+        const heartRate = await gcToUse.getHeartRate(today);
+        await sleep(500);
 
-// Save to cache
-cachedData[cacheKey] = {
-    timestamp: Date.now(),
-    data: responseData
-};
-try {
-    fs.writeFileSync(cacheFile, JSON.stringify(cachedData, null, 2));
-} catch (e) { }
+        // Activities
+        const activities = await gcToUse.getActivities(0, 5);
+        await sleep(500);
 
-return NextResponse.json(responseData);
+        // --- 3. SOMMEIL ---
+        // @ts-ignore
+        const sleepData = await gcToUse.getSleepData(today);
+        await sleep(500);
+
+        // --- 4. WELLNESS ---
+        // Body Battery
+        let bodyBattery = null;
+        try {
+            // @ts-ignore
+            bodyBattery = await gcToUse.client.get(`https://connect.garmin.com/wellness-service/wellness/dailyBodyBattery/${todayStr}/${todayStr}`);
+        } catch (e) { }
+        await sleep(500);
+
+        // Stress
+        let stress = null;
+        try {
+            // @ts-ignore
+            stress = await gcToUse.client.get(`https://connect.garmin.com/wellness-service/wellness/dailyStress/${todayStr}/${todayStr}`);
+        } catch (e) { }
+        await sleep(300);
+
+        // HRV
+        let hrvStatus = null;
+        try {
+            // @ts-ignore
+            hrvStatus = await gcToUse.client.get(`https://connect.garmin.com/hrv-service/hrv/daily/${todayStr}/${todayStr}`);
+        } catch (e) { }
+        await sleep(300);
+
+        // --- 5. LIFESTYLE ---
+        // Daily Summary
+        let dailySummary = null;
+        try {
+            // @ts-ignore
+            const summaries = await gcToUse.client.get(`https://connect.garmin.com/usersummary-service/usersummary/daily/${todayStr}/${todayStr}`);
+            if (Array.isArray(summaries) && summaries.length > 0) {
+                dailySummary = summaries[0];
+            }
+        } catch (e) { }
+
+        // Helper to calculate age from birthDate
+        const calculateAge = (birthDate: string) => {
+            if (!birthDate) return null;
+            const diff = Date.now() - new Date(birthDate).getTime();
+            return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+        };
+
+        const responseData = {
+            success: true,
+            profile: {
+                ...userProfile,
+                // @ts-ignore
+                weight: userSettings?.userData?.weight, // grams based on debug file
+                // @ts-ignore
+                height: userSettings?.userData?.height, // cm
+                // @ts-ignore
+                age: calculateAge(userSettings?.userData?.birthDate),
+            },
+            cardio: {
+                // @ts-ignore
+                vo2Max: vo2MaxData || (userSettings?.userData?.vo2MaxRunning ? [{ vo2MaxPrecise: userSettings.userData.vo2MaxRunning }] : null),
+                fitnessAge: fitnessData,
+                heartRate: heartRate,
+                activities: activities
+            },
+            sleep: sleepData,
+            wellness: {
+                bodyBattery,
+                stress,
+                hrv: hrvStatus
+            },
+            lifestyle: {
+                summary: dailySummary
+            }
+        };
+
+        // Save to cache
+        cachedData[cacheKey] = {
+            timestamp: Date.now(),
+            data: responseData
+        };
+        try {
+            fs.writeFileSync(cacheFile, JSON.stringify(cachedData, null, 2));
+        } catch (e) { }
+
+        return NextResponse.json(responseData);
 
     } catch (error: any) {
-    console.error('Garmin API Error:', error);
+        console.error('Garmin API Error:', error);
 
-    const errorMessage = error.message || error.toString();
+        const errorMessage = error.message || error.toString();
 
-    if (errorMessage.includes('Missing credentials') || errorMessage.includes('401')) {
+        if (errorMessage.includes('Missing credentials') || errorMessage.includes('401')) {
+            return NextResponse.json({
+                error: 'Session expirée',
+                details: 'Veuillez vous reconnecter (credentials manquants pour refresh auto).'
+            }, { status: 401 });
+        }
+
         return NextResponse.json({
-            error: 'Session expirée',
-            details: 'Veuillez vous reconnecter (credentials manquants pour refresh auto).'
-        }, { status: 401 });
+            error: 'Garmin Connection Error (Possible Rate Limit)',
+            details: errorMessage
+        }, { status: 500 });
     }
-
-    return NextResponse.json({
-        error: 'Garmin Connection Error (Possible Rate Limit)',
-        details: errorMessage
-    }, { status: 500 });
-}
 }
