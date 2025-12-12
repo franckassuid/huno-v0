@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Garmin Tracker",
-  description: "Track your steps with Garmin",
+  title: "Huno - Fitness that fit's you",
+  description: "Track your steps with Huno",
   manifest: "/manifest.json",
   icons: {
     icon: '/logo.png',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Garmin Tracker",
+    title: "Huno",
   },
 };
 

@@ -469,12 +469,12 @@ function downloadHunoProfileJson(hunoProfile: HunoProfile, rawGarminData?: any) 
 
 // --- COMPONENTS ---
 
-const InfoTooltip = ({ text }: { text: string }) => (
+const InfoTooltip = ({ text, align = 'center' }: { text: string, align?: 'center' | 'right' }) => (
   <div className="relative group/tooltip ml-2 cursor-help z-50">
     <HelpCircle className="w-4 h-4 text-gray-500/70 hover:text-white transition-colors" />
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 p-4 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl text-xs text-gray-300 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-center leading-relaxed">
+    <div className={`absolute bottom-full mb-3 w-56 p-4 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl text-xs text-gray-300 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-center leading-relaxed ${align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'}`}>
       {text}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#18181b]" />
+      <div className={`absolute top-full -mt-1 border-4 border-transparent border-t-[#18181b] ${align === 'right' ? 'right-1.5' : 'left-1/2 -translate-x-1/2'}`} />
     </div>
   </div>
 );
@@ -521,7 +521,7 @@ const HeartRateChart = ({ data }: { data: [number, number | null][] }) => {
 
   return (
     <div
-      className="w-full h-20 mt-4 relative cursor-crosshair group/chart"
+      className="w-full h-28 mt-4 relative cursor-crosshair group/chart"
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverData(null)}
     >
@@ -561,10 +561,47 @@ const HeartRateChart = ({ data }: { data: [number, number | null][] }) => {
       )}
 
       {/* Axis Labels (only visible when not hovering) */}
-      <div className={`flex justify-between text-[10px] text-gray-500 mt-1 font-mono transition-opacity ${hoverData ? 'opacity-20' : 'opacity-100'}`}>
+      <div className={`flex justify-between text-xs text-gray-500 mt-1 font-mono transition-opacity ${hoverData ? 'opacity-20' : 'opacity-100'}`}>
         <span>00:00</span>
         <span>12:00</span>
         <span>23:59</span>
+      </div>
+    </div>
+  );
+};
+
+const CircularProgress = ({ value, max = 100, color = "text-blue-500", size = 96, strokeWidth = 8, children }: any) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (value / max) * circumference;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg className="transform -rotate-90 w-full h-full overflow-visible">
+        <circle
+          className="text-white/5"
+          strokeWidth={strokeWidth}
+          stroke="currentColor"
+          fill="transparent"
+          r={radius}
+          cx={size / 2}
+          cy={size / 2}
+        />
+        <circle
+          className={`${color} transition-all duration-1000 ease-out`}
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          stroke="currentColor"
+          fill="transparent"
+          r={radius}
+          cx={size / 2}
+          cy={size / 2}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+        {children}
       </div>
     </div>
   );
@@ -645,10 +682,27 @@ export default function Home() {
 
   // ... (keeping other effects)
 
+  const [rememberMe, setRememberMe] = useState(false);
+
+  useEffect(() => {
+    // Check local storage for saved email
+    const savedEmail = localStorage.getItem('huno-saved-email');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
+
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (rememberMe) {
+      localStorage.setItem('huno-saved-email', email);
+    } else {
+      localStorage.removeItem('huno-saved-email');
+    }
 
     try {
       const payload = (email && password) ? { email, password } : {};
@@ -730,8 +784,9 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
-                Garmin Hub
+                Huno
               </h1>
+              <p className="text-lg text-gray-300 font-medium">Fitness that fit's you</p>
               <p className="text-gray-400 mt-2">Connectez votre compte pour accéder à vos données.</p>
             </div>
           </div>
@@ -742,6 +797,8 @@ export default function Home() {
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Email</label>
                 <input
                   type="email"
+                  name="email"
+                  autoComplete="email"
                   className="glass-input"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -753,11 +810,26 @@ export default function Home() {
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mot de passe</label>
                 <input
                   type="password"
+                  name="password"
+                  autoComplete="current-password"
                   className="glass-input"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                 />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded border-white/10 bg-white/5 text-blue-600 focus:ring-blue-500/50"
+                />
+                <label htmlFor="rememberMe" className="text-sm text-gray-400 select-none cursor-pointer">
+                  Se souvenir de mon email
+                </label>
               </div>
 
               {error && (
@@ -840,18 +912,7 @@ export default function Home() {
             <ChevronRight className="w-4 h-4" />
           </button>
 
-          <button
-            onClick={() => {
-              // Use the raw loaded cache if in test mode/initial load, usually garminCache import
-              // Ideally we should store rawGarminData in state if fetched from API but here we use the imported cache for the demo/test as requested
-              const rawData = (garminCache as any)[Object.keys(garminCache)[0]]?.data;
-              downloadHunoProfileJson(hunoProfile!, rawData);
-            }}
-            className="btn-secondary text-sm !px-3 md:!px-4"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline ml-2">JSON</span>
-          </button>
+
 
           <button onClick={() => {
             const rawData = (garminCache as any)[Object.keys(garminCache)[0]]?.data;
@@ -905,13 +966,14 @@ export default function Home() {
             value: hunoProfile.identity.bmi,
             unit: '',
             color: (hunoProfile.identity.bmi && hunoProfile.identity.bmi < 25) ? 'text-green-400' : 'text-orange-400',
-            tooltip: "Indice de Masse Corporelle calculé à partir de votre poids et taille."
+            tooltip: "Indice de Masse Corporelle calculé à partir de votre poids et taille.",
+            tooltipAlign: 'right' as const
           }
         ].map((stat, i) => (
           <div key={i} className="glass-card flex flex-col items-center justify-center py-4 hover:bg-white/10 transition-colors overflow-visible relative group">
             <span className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
               {stat.label}
-              {stat.tooltip && <InfoTooltip text={stat.tooltip} />}
+              {stat.tooltip && <InfoTooltip text={stat.tooltip} align={stat.tooltipAlign} />}
             </span>
             <span className={`text-2xl font-bold ${stat.color || 'text-white'}`}>
               {stat.value} <span className="text-sm text-gray-500 font-medium ml-0.5">{stat.unit}</span>
@@ -938,18 +1000,18 @@ export default function Home() {
             tooltip="Analyse la durée et les phases de votre sommeil pour évaluer la qualité de votre repos nocturne."
             subtitle={
               <div className="flex flex-col md:flex-row justify-between items-center w-full gap-4">
-                <div className="grid grid-cols-3 gap-2 md:gap-4 w-full md:w-auto">
-                  <div className="bg-white/5 rounded-lg p-2 text-center md:text-left">
-                    <span className="block text-[10px] uppercase text-gray-500 font-bold mb-1">Profond</span>
-                    <span className="text-white font-mono text-sm">{formatDuration(hunoProfile.wellnessStatus.sleep.deepSleepSeconds)}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
+                  <div className="bg-white/5 rounded-lg p-3 sm:p-2 text-left">
+                    <span className="block text-xs uppercase text-gray-500 font-bold mb-1">Profond</span>
+                    <span className="text-white font-mono text-base sm:text-sm">{formatDuration(hunoProfile.wellnessStatus.sleep.deepSleepSeconds)}</span>
                   </div>
-                  <div className="bg-white/5 rounded-lg p-2 text-center md:text-left">
-                    <span className="block text-[10px] uppercase text-gray-500 font-bold mb-1">Léger</span>
-                    <span className="text-white font-mono text-sm">{formatDuration(hunoProfile.wellnessStatus.sleep.lightSleepSeconds)}</span>
+                  <div className="bg-white/5 rounded-lg p-3 sm:p-2 text-left">
+                    <span className="block text-xs uppercase text-gray-500 font-bold mb-1">Léger</span>
+                    <span className="text-white font-mono text-base sm:text-sm">{formatDuration(hunoProfile.wellnessStatus.sleep.lightSleepSeconds)}</span>
                   </div>
-                  <div className="bg-white/5 rounded-lg p-2 text-center md:text-left">
-                    <span className="block text-[10px] uppercase text-gray-500 font-bold mb-1">REM</span>
-                    <span className="text-white font-mono text-sm">{formatDuration(hunoProfile.wellnessStatus.sleep.remSleepSeconds)}</span>
+                  <div className="bg-white/5 rounded-lg p-3 sm:p-2 text-left">
+                    <span className="block text-xs uppercase text-gray-500 font-bold mb-1">REM</span>
+                    <span className="text-white font-mono text-base sm:text-sm">{formatDuration(hunoProfile.wellnessStatus.sleep.remSleepSeconds)}</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between w-full md:w-auto gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
@@ -981,36 +1043,54 @@ export default function Home() {
 
         {/* Body Battery & Stress */}
         <div className="md:col-span-1 flex flex-col gap-6">
-          <div className="glass-card flex-1 p-5 flex items-center justify-between overflow-visible">
-            <div>
-              <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase mb-1">
-                <Battery className="w-4 h-4" />
-                <span>Body Battery</span>
-                <InfoTooltip text="Estime vos réserves d'énergie personnelles (0-100%) en fonction du stress et du repos." />
-              </div>
-              <div className="text-3xl font-black text-white">
-                {hunoProfile.wellnessStatus.bodyBattery ? hunoProfile.wellnessStatus.bodyBattery[0]?.bodyBatteryLevelValue : '--'}
-              </div>
+          {/* Body Battery */}
+          <div className="glass-card flex-1 p-4 flex flex-col items-center justify-center relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-transparent opacity-50" />
+
+            <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase mb-4 w-full px-2">
+              <Battery className="w-4 h-4" />
+              <span>Body Battery</span>
+              <InfoTooltip text="Estime vos réserves d'énergie personnelles (0-100%) en fonction du stress et du repos." />
             </div>
-            <div className="w-12 h-12 rounded-full border-4 border-blue-500/30 flex items-center justify-center text-xs font-bold text-blue-400">
-              {hunoProfile.wellnessStatus.bodyBattery ? hunoProfile.wellnessStatus.bodyBattery[0]?.bodyBatteryLevelValue : '-'}%
-            </div>
+
+            <CircularProgress
+              value={hunoProfile.wellnessStatus.bodyBattery && hunoProfile.wellnessStatus.bodyBattery[0]?.bodyBatteryValuesArray
+                ? hunoProfile.wellnessStatus.bodyBattery[0].bodyBatteryValuesArray.slice(-1)[0][1]
+                : (hunoProfile.wellnessStatus.bodyBattery?.[0]?.bodyBatteryLevelValue ?? 0)}
+              color="text-blue-500"
+            >
+              <span className="text-3xl font-black">
+                {hunoProfile.wellnessStatus.bodyBattery && hunoProfile.wellnessStatus.bodyBattery[0]?.bodyBatteryValuesArray
+                  ? hunoProfile.wellnessStatus.bodyBattery[0].bodyBatteryValuesArray.slice(-1)[0][1]
+                  : (hunoProfile.wellnessStatus.bodyBattery?.[0]?.bodyBatteryLevelValue ?? '--')}
+              </span>
+              <span className="text-xs text-gray-400 font-bold uppercase">%</span>
+            </CircularProgress>
           </div>
 
-          <div className="glass-card flex-1 p-5 flex items-center justify-between overflow-visible">
-            <div>
-              <div className="flex items-center gap-2 text-orange-400 text-xs font-bold uppercase mb-1">
-                <Zap className="w-4 h-4" />
-                <span>Stress</span>
-                <InfoTooltip text="Niveau de stress physiologique (0-100) basé sur la variabilité de votre fréquence cardiaque." />
-              </div>
-              <div className="text-3xl font-black text-white">
-                {hunoProfile.wellnessStatus.stress ? hunoProfile.wellnessStatus.stress[0]?.averageStressLevel : '--'}
-              </div>
+          {/* Stress */}
+          <div className="glass-card flex-1 p-4 flex flex-col items-center justify-center relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-transparent opacity-50" />
+
+            <div className="flex items-center gap-2 text-orange-400 text-xs font-bold uppercase mb-4 w-full px-2">
+              <Zap className="w-4 h-4" />
+              <span>Stress</span>
+              <InfoTooltip text="Niveau de stress physiologique (0-100) basé sur la variabilité de votre fréquence cardiaque." />
             </div>
-            <div className="w-12 h-12 rounded-full border-4 border-orange-500/30 flex items-center justify-center text-xs font-bold text-orange-400">
-              {hunoProfile.wellnessStatus.stress ? hunoProfile.wellnessStatus.stress[0]?.averageStressLevel : '-'}
-            </div>
+
+            <CircularProgress
+              value={hunoProfile.wellnessStatus.stress && hunoProfile.wellnessStatus.stress[0]?.stressValuesArray
+                ? hunoProfile.wellnessStatus.stress[0].stressValuesArray.slice(-1)[0][1]
+                : (hunoProfile.wellnessStatus.stress?.[0]?.averageStressLevel ?? 0)}
+              color="text-orange-500"
+            >
+              <span className="text-3xl font-black">
+                {hunoProfile.wellnessStatus.stress && hunoProfile.wellnessStatus.stress[0]?.stressValuesArray
+                  ? hunoProfile.wellnessStatus.stress[0].stressValuesArray.slice(-1)[0][1]
+                  : (hunoProfile.wellnessStatus.stress?.[0]?.averageStressLevel ?? '--')}
+              </span>
+              <span className="text-xs text-gray-400 font-bold uppercase">/ 100</span>
+            </CircularProgress>
           </div>
         </div>
 
@@ -1102,11 +1182,11 @@ export default function Home() {
               </table>
             </div>
 
-            {/* Mobile List View */}
-            <div className="md:hidden flex flex-col divide-y divide-white/5">
+            {/* Mobile List View - Card Style */}
+            <div className="md:hidden flex flex-col gap-3">
               {hunoProfile.recentActivities.length > 0 ? (
                 hunoProfile.recentActivities.slice(0, 5).map((act, idx) => (
-                  <div key={idx} className="p-4 flex items-center justify-between group active:bg-white/5 transition-colors">
+                  <div key={idx} className="p-4 bg-white/5 rounded-2xl flex items-center justify-between group active:scale-[0.98] transition-all border border-white/5">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
                         <Activity className="w-5 h-5" />
@@ -1139,8 +1219,9 @@ export default function Home() {
           </section>
         </div>
 
-      </div>
+      </div >
 
+      {/* FOOTER */}
       {/* FOOTER */}
       <footer className="pt-8 border-t border-white/5 text-center md:text-left flex flex-col md:flex-row justify-between items-center text-xs text-gray-600 gap-4">
         <div className="flex gap-4">
