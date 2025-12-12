@@ -4,6 +4,12 @@ import { GarminConnect } from 'garmin-connect';
 // --- PROXY CONFIGURATION START ---
 import { setGlobalDispatcher, ProxyAgent } from 'undici';
 
+console.log(">>> VERCEL DIAGNOSTIC: Testing Environment Variables...");
+console.log(">>> PROXY_URL Status:", process.env.PROXY_URL ? "PRESENT ✅" : "MISSING ❌");
+if (process.env.PROXY_URL) {
+    console.log(">>> PROXY_URL Value starts with:", process.env.PROXY_URL.substring(0, 10) + "...");
+}
+
 if (process.env.PROXY_URL) {
     try {
         const redactedUrl = process.env.PROXY_URL.replace(/:[^:]*@/, ':***@');
