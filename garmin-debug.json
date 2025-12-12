@@ -1,0 +1,246 @@
+{
+  "userProfile": {
+    "id": 398020524,
+    "profileId": 103650971,
+    "garminGUID": "524fabbc-b2ba-4134-8def-a0c1bf28e7be",
+    "displayName": "588d7b34-e06b-4760-870f-72ae67f8531c",
+    "fullName": "Franck",
+    "userName": "fassuid@gmail.com",
+    "profileImageType": "UPLOADED_PHOTO",
+    "profileImageUrlLarge": "https://s3.amazonaws.com/garmin-connect-prod/profile_images/dd650ceb-9e33-44cd-ac71-1d5e53fc63db-prof.png",
+    "profileImageUrlMedium": "https://s3.amazonaws.com/garmin-connect-prod/profile_images/dd650ceb-9e33-44cd-ac71-1d5e53fc63db-prfr.png",
+    "profileImageUrlSmall": "https://s3.amazonaws.com/garmin-connect-prod/profile_images/dd650ceb-9e33-44cd-ac71-1d5e53fc63db-prth.png",
+    "hasPremiumSocialIcon": false,
+    "location": "Noisy le Grand, Ile de France",
+    "facebookUrl": null,
+    "twitterUrl": null,
+    "personalWebsite": null,
+    "motivation": null,
+    "bio": null,
+    "primaryActivity": null,
+    "favoriteActivityTypes": [],
+    "runningTrainingSpeed": 0,
+    "cyclingTrainingSpeed": 0,
+    "favoriteCyclingActivityTypes": [],
+    "cyclingClassification": null,
+    "cyclingMaxAvgPower": 0,
+    "swimmingTrainingSpeed": 0,
+    "profileVisibility": "private",
+    "activityStartVisibility": "public",
+    "activityMapVisibility": "public",
+    "courseVisibility": "public",
+    "activityHeartRateVisibility": "public",
+    "activityPowerVisibility": "public",
+    "badgeVisibility": "following",
+    "showAge": false,
+    "showWeight": false,
+    "showHeight": false,
+    "showWeightClass": false,
+    "showAgeRange": false,
+    "showGender": false,
+    "showActivityClass": false,
+    "showVO2Max": false,
+    "showPersonalRecords": true,
+    "showLast12Months": true,
+    "showLifetimeTotals": true,
+    "showUpcomingEvents": true,
+    "showRecentFavorites": true,
+    "showRecentDevice": true,
+    "showRecentGear": false,
+    "showBadges": true,
+    "otherActivity": null,
+    "otherPrimaryActivity": null,
+    "otherMotivation": null,
+    "userRoles": [
+      "SCOPE_ATP_READ",
+      "SCOPE_ATP_WRITE",
+      "SCOPE_CIQ_APPSTORE_SERVICES_CREATE",
+      "SCOPE_CIQ_APPSTORE_SERVICES_DELETE",
+      "SCOPE_CIQ_APPSTORE_SERVICES_READ",
+      "SCOPE_CIQ_APPSTORE_SERVICES_UPDATE",
+      "SCOPE_COMMUNITY_COURSE_READ",
+      "SCOPE_COMMUNITY_COURSE_WRITE",
+      "SCOPE_CONNECT_MCT_DAILY_LOG_READ",
+      "SCOPE_CONNECT_READ",
+      "SCOPE_CONNECT_WRITE",
+      "SCOPE_DIVE_API_READ",
+      "SCOPE_DI_OAUTH_2_AUTHORIZATION_CODE_CREATE",
+      "SCOPE_DT_CLIENT_ANALYTICS_WRITE",
+      "SCOPE_GARMINPAY_READ",
+      "SCOPE_GARMINPAY_WRITE",
+      "SCOPE_GCOFFER_READ",
+      "SCOPE_GCOFFER_WRITE",
+      "SCOPE_GHS_SAMD",
+      "SCOPE_GHS_UPLOAD",
+      "SCOPE_GOLF_API_READ",
+      "SCOPE_GOLF_API_WRITE",
+      "SCOPE_INSIGHTS_READ",
+      "SCOPE_INSIGHTS_WRITE",
+      "SCOPE_OMT_CAMPAIGN_READ",
+      "SCOPE_OMT_SUBSCRIPTION_READ",
+      "SCOPE_PRODUCT_SEARCH_READ",
+      "ROLE_CONNECTUSER",
+      "ROLE_FITNESS_USER",
+      "ROLE_WELLNESS_USER",
+      "ROLE_OUTDOOR_USER",
+      "ROLE_DIVE_USER"
+    ],
+    "nameApproved": true,
+    "userProfileFullName": "Franck",
+    "makeGolfScorecardsPrivate": true,
+    "allowGolfLiveScoring": false,
+    "allowGolfScoringByConnections": true,
+    "userLevel": 3,
+    "userPoint": 70,
+    "levelUpdateDate": "2023-03-08T22:29:26.0",
+    "levelIsViewed": false,
+    "levelPointThreshold": 140,
+    "userPointOffset": 0,
+    "userPro": false
+  },
+  "userSettings": {
+    "id": 103650971,
+    "userData": {
+      "gender": "MALE",
+      "weight": 68000,
+      "height": 168,
+      "timeFormat": "time_twelve_hr",
+      "birthDate": "1989-12-09",
+      "measurementSystem": "metric",
+      "activityLevel": 4,
+      "handedness": "RIGHT",
+      "powerFormat": {
+        "formatId": 30,
+        "formatKey": "watt",
+        "minFraction": 0,
+        "maxFraction": 0,
+        "groupingUsed": true,
+        "displayFormat": null
+      },
+      "heartRateFormat": {
+        "formatId": 21,
+        "formatKey": "bpm",
+        "minFraction": 0,
+        "maxFraction": 0,
+        "groupingUsed": false,
+        "displayFormat": null
+      },
+      "firstDayOfWeek": {
+        "dayId": 3,
+        "dayName": "monday",
+        "sortOrder": 3,
+        "isPossibleFirstDay": true
+      },
+      "vo2MaxRunning": 44,
+      "vo2MaxCycling": null,
+      "lactateThresholdSpeed": null,
+      "lactateThresholdHeartRate": null,
+      "diveNumber": 242,
+      "intensityMinutesCalcMethod": "AUTO",
+      "moderateIntensityMinutesHrZone": 3,
+      "vigorousIntensityMinutesHrZone": 4,
+      "hydrationMeasurementUnit": "milliliter",
+      "hydrationContainers": [
+        {
+          "name": null,
+          "volume": 236,
+          "unit": "milliliter"
+        },
+        {
+          "name": null,
+          "volume": 2,
+          "unit": "cup"
+        },
+        {
+          "name": null,
+          "volume": 3,
+          "unit": "cup"
+        }
+      ],
+      "hydrationAutoGoalEnabled": true,
+      "firstbeatMaxStressScore": null,
+      "firstbeatCyclingLtTimestamp": null,
+      "firstbeatRunningLtTimestamp": null,
+      "thresholdHeartRateAutoDetected": null,
+      "ftpAutoDetected": true,
+      "trainingStatusPausedDate": null,
+      "weatherLocation": {
+        "useFixedLocation": null,
+        "latitude": null,
+        "longitude": null,
+        "locationName": null,
+        "isoCountryCode": null,
+        "postalCode": null
+      },
+      "golfDistanceUnit": "metric",
+      "golfElevationUnit": null,
+      "golfSpeedUnit": null,
+      "externalBottomTime": 541320,
+      "availableTrainingDays": [
+        "TUESDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "THURSDAY",
+        "SUNDAY",
+        "MONDAY",
+        "WEDNESDAY"
+      ],
+      "preferredLongTrainingDays": [
+        "SATURDAY",
+        "SUNDAY"
+      ],
+      "virtualCaddieDataSource": null,
+      "numberDivesAutomatically": null
+    },
+    "userSleep": {
+      "sleepTime": 0,
+      "defaultSleepTime": false,
+      "wakeTime": 28800,
+      "defaultWakeTime": false
+    },
+    "connectDate": null,
+    "sourceType": null,
+    "userSleepWindows": [
+      {
+        "sleepWindowFrequency": "SUNDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "MONDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "TUESDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "WEDNESDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "THURSDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "FRIDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "SATURDAY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      },
+      {
+        "sleepWindowFrequency": "DAILY",
+        "startSleepTimeSecondsFromMidnight": 0,
+        "endSleepTimeSecondsFromMidnight": 28800
+      }
+    ]
+  }
+}
