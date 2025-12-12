@@ -1159,7 +1159,7 @@ export default function OnboardingPage() {
     const progress = ((currentStep + 1) / activeQuestions.length) * 100;
 
     return (
-        <main className="min-h-screen bg-[#09090b] text-white flex flex-col relative overflow-hidden font-sans selection:bg-blue-500/30">
+        <main className="h-[100dvh] bg-[#09090b] text-white flex flex-col relative overflow-hidden font-sans selection:bg-blue-500/30">
             {/* ProgressBar */}
             <div className="absolute top-0 left-0 w-full h-1.5 bg-white/5 z-20">
                 <div
@@ -1169,7 +1169,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Header */}
-            <div className="p-6 md:p-8 flex justify-between items-center z-10">
+            <div className="p-6 md:p-8 flex justify-between items-center z-10 shrink-0">
                 <button onClick={() => router.push('/')} className="p-3 hover:bg-white/5 rounded-full text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
                     <X className="w-6 h-6" />
                 </button>
@@ -1184,7 +1184,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-5xl mx-auto w-full z-10 animate-in fade-in slide-in-from-bottom-4 duration-500" key={currentQ.id}>
+            <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-5xl mx-auto w-full z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto" key={currentQ.id}>
                 <div className="text-center mb-6 md:mb-12">
                     <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400 tracking-tight leading-tight mb-4 drop-shadow-sm">
                         {currentQ.title}

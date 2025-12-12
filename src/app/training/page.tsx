@@ -226,7 +226,7 @@ export default function TrainingPage() {
     }
 
     return (
-        <main className="min-h-screen bg-zinc-950 flex flex-col items-center justify-between p-4 relative overflow-hidden text-white font-sans">
+        <main className="h-[100dvh] bg-zinc-950 flex flex-col items-center justify-between p-4 relative overflow-hidden text-white font-sans">
             {/* Ambient Background */}
             <div className="absolute top-[-20%] left-[-20%] w-[600px] h-[600px] bg-blue-600/10 blur-[150px] rounded-full pointer-events-none" />
             <div className="absolute bottom-[-20%] right-[-20%] w-[600px] h-[600px] bg-purple-600/10 blur-[150px] rounded-full pointer-events-none" />
@@ -251,7 +251,7 @@ export default function TrainingPage() {
             </header>
 
             {/* MAIN CONTENT AREA */}
-            <div className="flex-1 flex flex-col items-center justify-center w-full max-w-[600px] relative z-10 my-2">
+            <div className="flex-1 flex flex-col items-center justify-center w-full max-w-[600px] relative z-10 my-2 overflow-y-auto scrollbar-hide">
 
                 {/* 3D VIEWER CONTAINER - INCREASED SIZE */}
                 <div className="relative w-[85vw] h-[85vw] max-w-[420px] max-h-[420px] sm:max-w-[500px] sm:max-h-[500px] mb-6">
