@@ -6,25 +6,42 @@ import { setGlobalDispatcher, ProxyAgent } from 'undici';
 
 if (process.env.PROXY_URL) {
     try {
-        console.log("Initializing Undici Proxy Agent with:", process.env.PROXY_URL.replace(/:[^:]*@/, ':***@')); // Hide password
+        const redactedUrl = process.env.PROXY_URL.replace(/:[^:]*@/, ':***@');
+        console.log("Initializing Proxy Strategies with:", redactedUrl);
 
-        const proxyAgent = new ProxyAgent(process.env.PROXY_URL);
-        setGlobalDispatcher(proxyAgent);
+        // 1. Undici (For fetch - Node 18+)
+        try {
+            const proxyAgent = new ProxyAgent(process.env.PROXY_URL);
+            setGlobalDispatcher(proxyAgent);
+            console.log(" - Undici ProxyAgent set.");
+        } catch (err) { console.error("Undici setup failed:", err); }
 
-        // DEBUG: Check IP
+        // 2. Global Agent (For http/axios - Legacy Node)
+        try {
+            const { bootstrap } = require('global-agent');
+            // Check if already active to avoid loops or errors
+            if (!(global as any).GLOBAL_AGENT) {
+                process.env.GLOBAL_AGENT_HTTP_PROXY = process.env.PROXY_URL;
+                process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.PROXY_URL;
+                bootstrap();
+                console.log(" - Global Agent bootstrapped.");
+            }
+        } catch (err) { console.error("Global Agent setup failed:", err); }
+
+        // DEBUG: Check IP (using fetch)
         (async () => {
             try {
-                console.log("DEBUG: Checking outgoing IP through Proxy...");
+                console.log("DEBUG: Checking outgoing IP (via fetch)...");
                 const ipRes = await fetch('https://api.ipify.org?format=json');
                 const ipJson = await ipRes.json();
                 console.log("DEBUG: Current Server IP is:", ipJson.ip);
             } catch (e) {
-                console.error("DEBUG: Failed to check IP:", e);
+                console.error("DEBUG: IP Check Failed:", e);
             }
         })();
 
     } catch (e) {
-        console.error("Failed to initialize proxy agent:", e);
+        console.error("Failed to initialize proxies:", e);
     }
 }
 // --- PROXY CONFIGURATION END ---
