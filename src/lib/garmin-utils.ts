@@ -104,7 +104,7 @@ export function buildHunoProfile(garminData: GarminData): HunoProfile {
     const cardio = garminData.cardio || {};
     const hr = cardio.heartRate || {};
     const vo2 = cardio.vo2Max?.[0] || null;
-    const activities = cardio.activities || [];
+    const activities = Array.isArray(cardio.activities) ? cardio.activities : [];
     const sleepDTO = garminData.sleep?.dailySleepDTO || {};
     const wellness = garminData.wellness || {};
     const lifestyle = garminData.lifestyle?.summary || {};

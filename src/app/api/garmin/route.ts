@@ -184,7 +184,11 @@ export async function POST(request: Request) {
                 featureName: 'activities',
                 params: { limit: 20, start: 0 }
             });
-            activities = actData;
+            if (Array.isArray(actData)) {
+                activities = actData;
+            } else {
+                console.warn("Activities response was not an array", typeof actData);
+            }
         } catch (e) { console.error("Activities fetch failed", e); }
 
 
