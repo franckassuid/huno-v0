@@ -65,6 +65,12 @@ function logBootContext() {
     console.log("BOOT CONTEXT:", JSON.stringify(context, null, 2));
 }
 
+const calculateAge = (birthDate: string) => {
+    if (!birthDate) return null;
+    const diff = Date.now() - new Date(birthDate).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+};
+
 export async function POST(request: Request) {
     logBootContext();
     try {
@@ -196,6 +202,7 @@ export async function POST(request: Request) {
         const fetchWithFallback = async (label: string, featureName: string, urlBuilder: (date: string) => string, dates: string[]) => {
             for (const d of dates) {
                 try {
+                    console.log(`[ROUTE LOG] Fetching ${featureName} | Date: ${d} | UserId: ${userId}`);
                     const data = await garminFetch({
                         client: gcToUse.client,
                         url: urlBuilder(d),
@@ -270,11 +277,6 @@ export async function POST(request: Request) {
         );
 
 
-        const calculateAge = (birthDate: string) => {
-            if (!birthDate) return null;
-            const diff = Date.now() - new Date(birthDate).getTime();
-            return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-        };
 
         const responseData = {
             success: true,
