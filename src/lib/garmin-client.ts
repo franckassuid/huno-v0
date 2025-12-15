@@ -1,0 +1,87 @@
+
+import { GarminConnect } from 'garmin-connect';
+import { setGlobalDispatcher, ProxyAgent } from 'undici';
+import path from 'path';
+import fs from 'fs';
+
+// --- CONFIGURATION ---
+const SESSION_FILE = path.join('/tmp', 'session.json');
+
+// --- PROXY SETUP ---
+export function setupProxy() {
+    if (process.env.PROXY_URL) {
+        try {
+            // 1. Undici (Node 18+)
+            try {
+                const proxyAgent = new ProxyAgent(process.env.PROXY_URL);
+                setGlobalDispatcher(proxyAgent);
+            } catch (err) { console.error("Undici setup failed:", err); }
+
+            // 2. Global Agent (Legacy)
+            try {
+                const { bootstrap } = require('global-agent');
+                if (!(global as any).GLOBAL_AGENT) {
+                    process.env.GLOBAL_AGENT_HTTP_PROXY = process.env.PROXY_URL;
+                    process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.PROXY_URL;
+                    bootstrap();
+                }
+            } catch (err) { console.error("Global Agent setup failed:", err); }
+
+        } catch (e) {
+            console.error("Failed to initialize proxies:", e);
+        }
+    }
+}
+
+// --- CLIENT FACTORY ---
+export async function getAuthenticatedGarminClient(email?: string, password?: string): Promise<GarminConnect> {
+
+    // Ensure proxy is set up before any connection
+    setupProxy();
+
+    let client: GarminConnect | null = null;
+    let loggedIn = false;
+
+    // SCENARIO 1: Explicit Credentials
+    if (email && password) {
+        const gc = new GarminConnect({ username: email, password });
+        try {
+            await gc.login();
+            gc.exportTokenToFile(SESSION_FILE);
+            client = gc;
+            loggedIn = true;
+        } catch (e) {
+            console.error("Login failed:", e);
+            throw e;
+        }
+    }
+    // SCENARIO 2: Session Restore
+    else {
+        const gc = new GarminConnect({ username: 'dummy', password: 'password' });
+        if (fs.existsSync(SESSION_FILE)) {
+            try {
+                gc.loadTokenByFile(SESSION_FILE);
+                client = gc;
+                loggedIn = true; // Assume valid until proven otherwise
+            } catch (e) {
+                console.warn("Session restore failed:", e);
+            }
+        }
+    }
+
+    if (!client || !loggedIn) {
+        throw new Error('Authentication failed: No credentials provided and no valid session found.');
+    }
+
+    // INJECT HEADERS
+    if (client.client && client.client.defaults && client.client.defaults.headers) {
+        client.client.defaults.headers = {
+            ...client.client.defaults.headers,
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'nk': 'NT'
+        };
+    }
+
+    return client;
+}
