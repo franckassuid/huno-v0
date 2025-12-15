@@ -218,10 +218,13 @@ export async function POST(request: Request) {
             console.error(`[HARDCORE FAIL] gc-api failed:`, err.message, err.response?.status);
             logDebug('Fetch 1 Failed', { message: err.message, status: err.response?.status, data: err.response?.data });
 
-            // Fallback to Proxy URL attempt
+            // Fallback to Proxy URL attempt with NUMERIC ID (Legacy support)
             try {
-                const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`;
-                logDebug('Fetch Attempt 2 (Proxy)', { url: proxyUrl });
+                const numericId = userProfile.profileId;
+                // Note: 'modern/proxy' is the base.
+                const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${numericId}?calendarDate=${fallbackDates[0]}`;
+                logDebug('Fetch Attempt 2 (Proxy + Numeric ID)', { url: proxyUrl });
+
                 // Fallback Cookie Logic
                 // @ts-ignore
                 const cookieJar2 = gc.client.client.defaults.jar;
@@ -240,10 +243,12 @@ export async function POST(request: Request) {
                     url: proxyUrl,
                     headers: headers
                 });
+
                 logDebug('Fetch 2 Result', { status: response.status, dataSlice: JSON.stringify(response.data).slice(0, 200) });
-                if (response.data) {
+
+                if (response.data && Object.keys(response.data).length > 0) { // Ensure not empty
                     summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
-                    console.log("[HARDCORE SUCCESS] Proxy retrieved!");
+                    console.log("[HARDCORE SUCCESS] Proxy retrieved with Numeric ID!");
                 }
             } catch (e: any) {
                 console.error("[HARDCORE FAIL] Proxy also failed");
