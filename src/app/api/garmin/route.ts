@@ -438,6 +438,7 @@ export async function POST(request: Request) {
             return NextResponse.json(responseData);
 
         } catch (error: any) {
+            console.log("CRITICAL ERROR CAUGHT");
             console.error("CRITICAL API ERROR:", error);
             return NextResponse.json({
                 error: 'Garmin Connection Error',
