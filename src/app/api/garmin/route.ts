@@ -189,30 +189,51 @@ export async function POST(request: Request) {
         } catch (e) { console.error("Summary fetch failed"); }
 
 
-        // Extract metrics from the summary object
-        // The structure usually is: { totalSteps:..., bodyBatteryMostRecentValue:..., stressDuration:..., sleepingSeconds: ... }
-
-        // Construct standard response objects from this single source of truth if possible.
-        // If not sufficient, we can try other specific endpoints, but this one is the "Web Dashboard" one.
+        // Create cleaner result objects directly from the Summary Source of Truth
 
         const sleepResult = {
-            status: dailySummaryData.sleepingSeconds ? 'available' : 'unavailable',
-            data: dailySummaryData // Pass full object, utils will extract
+            status: (dailySummaryData.sleepingSeconds && dailySummaryData.sleepingSeconds > 0) ? 'available' : 'unavailable',
+            data: {
+                dailySleepDTO: { // Mock DTO structure to match garmin-utils expectations
+                    sleepTimeSeconds: dailySummaryData.sleepingSeconds,
+                    deepSleepSeconds: null, // Summary doesn't provide stages
+                    lightSleepSeconds: null,
+                    remSleepSeconds: null
+                }
+            }
         };
 
         const bbResult = {
-            status: dailySummaryData.bodyBatteryMostRecentValue ? 'available' : 'unavailable',
-            data: dailySummaryData
+            status: dailySummaryData.bodyBatteryMostRecentValue !== undefined ? 'available' : 'unavailable',
+            data: [ // Mock array structure for garmin-utils
+                {
+                    date: dailySummaryData.calendarDate,
+                    charged: dailySummaryData.bodyBatteryChargedValue,
+                    drained: dailySummaryData.bodyBatteryDrainedValue,
+                    high: dailySummaryData.bodyBatteryHighestValue,
+                    low: dailySummaryData.bodyBatteryLowestValue,
+                    val: dailySummaryData.bodyBatteryMostRecentValue
+                } // utils might need adjusting if it expects strictly [timestamp, value] pairs. 
+                // But let's send this rich object and update utils next.
+            ]
         };
 
         const stressResult = {
-            status: dailySummaryData.stressDuration ? 'available' : 'unavailable',
-            data: dailySummaryData
+            status: dailySummaryData.averageStressLevel !== undefined ? 'available' : 'unavailable',
+            data: {
+                avgStressLevel: dailySummaryData.averageStressLevel,
+                maxStressLevel: dailySummaryData.maxStressLevel,
+                stressDuration: dailySummaryData.stressDuration,
+                restStressDuration: dailySummaryData.restStressDuration,
+                stressQualifier: dailySummaryData.stressQualifier
+            }
         };
 
         const hrvResult = {
-            status: dailySummaryData.hrvStatus ? 'available' : 'unavailable',
-            data: dailySummaryData
+            // HRV is NOT in the UserSummary JSON provided. 
+            // We'll mark it unavailable unless we fetch it separately successfully.
+            status: 'unavailable',
+            data: null
         };
 
         // Heart Rate is usually separate (chart data).
@@ -222,6 +243,16 @@ export async function POST(request: Request) {
             (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/${userId}`,
             [todayStr]
         ); // This one might still fail if not updated, but let's keep it 'best effort'.
+
+        // Enhance Cardio with Summary Data
+        const cardioData = {
+            vo2Max: dailySummaryData.vo2MaxPrecise || null,
+            fitnessAge: dailySummaryData.fitnessAge || null,
+            restingHrToday: dailySummaryData.restingHeartRate,
+            minHrToday: dailySummaryData.minHeartRate,
+            maxHrToday: dailySummaryData.maxHeartRate,
+            heartRateValues: heartRateResult.data // Keep the detailed chart if it worked
+        };
 
 
         // --- RESPONSE ASSEMBLY ---
@@ -243,9 +274,7 @@ export async function POST(request: Request) {
                 age: calculateAge(userSettings?.userData?.birthDate),
             },
             cardio: {
-                vo2Max: dailySummaryData.vo2MaxPrecise || null,
-                fitnessAge: dailySummaryData.fitnessAge || null,
-                heartRate: heartRateResult.data,
+                ...cardioData,
                 activities: activities
             },
             wellness: {
