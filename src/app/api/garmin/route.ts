@@ -188,7 +188,7 @@ export async function POST(request: Request) {
         // --- 4. FETCH DATA (Cleaner Stability-First Approach) ---
 
         let dailySummaryData: any = {};
-        let summaryRaw: { status: string; data: any; date: string } = { status: 'unavailable', data: null, date: '' };
+        let summaryRaw: any = { status: 'unavailable', data: null, date: '' };
 
         // ATTEMPT 1: Modern Proxy (UserSummary)
         summaryRaw = await fetchWithFallback(
