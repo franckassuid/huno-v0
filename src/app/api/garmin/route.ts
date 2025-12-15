@@ -28,6 +28,13 @@ export async function POST(request: Request) {
 
     try {
         // --- 1. AUTHENTICATION ---
+        // DEBUG TRACE STORAGE
+        const debugTrace: any[] = [];
+        const logDebug = (label: string, details: any) => {
+            console.log(`[DEBUG] ${label}`, details);
+            debugTrace.push({ time: new Date().toISOString(), label, ...details });
+        };
+
         let email = '';
         let password = '';
         try {
@@ -172,6 +179,8 @@ export async function POST(request: Request) {
         try {
             const targetUrl = `https://connect.garmin.com/gc-api/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`; // Use first date (today)
 
+            logDebug('Fetch Attempt 1 (GC-API)', { url: targetUrl });
+
             // Direct Axios call to bypass any library wrapping that might strip headers
             const headers = {
                 'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
@@ -191,6 +200,8 @@ export async function POST(request: Request) {
                 headers: headers
             });
 
+            logDebug('Fetch 1 Result', { status: response.status, dataSlice: JSON.stringify(response.data).slice(0, 200) });
+
             if (response.data) {
                 summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
                 console.log("[HARDCORE SUCCESS] Data retrieved!");
@@ -198,10 +209,12 @@ export async function POST(request: Request) {
 
         } catch (err: any) {
             console.error(`[HARDCORE FAIL] gc-api failed:`, err.message, err.response?.status);
+            logDebug('Fetch 1 Failed', { message: err.message, status: err.response?.status, data: err.response?.data });
 
             // Fallback to Proxy URL attempt
             try {
                 const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`;
+                logDebug('Fetch Attempt 2 (Proxy)', { url: proxyUrl });
                 const headers = {
                     'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
                     'NK': 'NT',
@@ -215,11 +228,15 @@ export async function POST(request: Request) {
                     url: proxyUrl,
                     headers: headers
                 });
+                logDebug('Fetch 2 Result', { status: response.status, dataSlice: JSON.stringify(response.data).slice(0, 200) });
                 if (response.data) {
                     summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
                     console.log("[HARDCORE SUCCESS] Proxy retrieved!");
                 }
-            } catch (e) { console.error("[HARDCORE FAIL] Proxy also failed"); }
+            } catch (e: any) {
+                console.error("[HARDCORE FAIL] Proxy also failed");
+                logDebug('Fetch 2 Failed', { message: e.message, status: e.response?.status });
+            }
         }
 
         if (summaryRaw.status === 'available') {
@@ -330,6 +347,7 @@ export async function POST(request: Request) {
         const responseData = {
             success: true,
             timestamp: new Date().toISOString(),
+            _debug_trace: debugTrace,
             debug_info: process.env.GARMIN_DEBUG === '1' ? {
                 generated_at: new Date().toISOString(),
                 user_id: userId,
