@@ -65,11 +65,8 @@ export async function POST(request: Request) {
         // 1. Profile & Settings
         console.log("Fetching User Profile...");
         const userProfile = await gc.getUserProfile();
-        // userProfile.profileId is long, displayName is string. 
-        // Wellness endpoints usually prefer displayName or profileId? 
-        // Empirically, new endpoints use numeric profileId, older ones displayName.
-        // We will try numeric first if available.
-        const userId = userProfile.profileId || userProfile.displayName;
+        // VERIFIED TRUTH: Use displayName (UUID) for these specific endpoints
+        const userId = userProfile.displayName;
 
         console.log(`User ID identified for calls: ${userId}`);
 
@@ -119,7 +116,7 @@ export async function POST(request: Request) {
                         client: gc.client,
                         url: urlBuilder(d),
                         featureName,
-                        params: { date: d }
+                        params: { calendarDate: d } // CHANGED: param name is 'calendarDate' for user-summary
                     });
 
                     // Raw logging per user request (Step 1)
@@ -151,58 +148,69 @@ export async function POST(request: Request) {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const twoDaysAgo = new Date(today);
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-        const twoDaysAgoStr = twoDaysAgo.toISOString().split('T')[0];
+        // const twoDaysAgo = new Date(today); // Removed as per new fallbackDates
+        // twoDaysAgo.setDate(twoDaysAgo.getDate() - 2); // Removed as per new fallbackDates
+        // const twoDaysAgoStr = twoDaysAgo.toISOString().split('T')[0]; // Removed as per new fallbackDates
 
-        const fallbackDates = [todayStr, yesterdayStr, twoDaysAgoStr];
+        const fallbackDates = [todayStr, yesterdayStr];
 
 
-        // 4. WELLNESS (& Specific Endpoints)
+        // 4. WELLNESS (REVISED ENDPOINTS BASED ON TRUTH)
+        // Verified Endpoint: /usersummary-service/usersummary/daily/{uuid}?calendarDate=...
 
-        // Sleep
-        const sleepResult = await fetchWithFallback(
-            'dailyWellness.sleep',
-            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySleepData/${userId}`,
-            fallbackDates
-        );
+        console.log("--- WELLNESS FETCHING (Verified Mode) ---");
 
-        // Body Battery (Try correct endpoint variants)
-        // Usually: /wellness-service/wellness/bodyBattery/daily/{userId}
-        const bbResult = await fetchWithFallback(
-            'dailyWellness.bodyBattery',
-            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/bodyBattery/daily/${userId}`,
-            [todayStr, yesterdayStr]
-        );
+        // The "usersummary/daily" endpoint actually contains ALL metrics in one go!
+        // We should fetch it ONCE and dispatch the data.
 
-        // Stress
-        const stressResult = await fetchWithFallback(
-            'dailyWellness.stress',
-            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyStress/${userId}`,
-            [todayStr, yesterdayStr]
-        );
+        let dailySummaryData: any = {};
 
-        // HRV
-        // Note: HRV sometimes is strict on date.
-        const hrvResult = await fetchWithFallback(
-            'dailyWellness.hrv',
-            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/hrv/daily/${userId}`,
-            fallbackDates
-        );
+        try {
+            const summaryRaw = await fetchWithFallback(
+                'verified.dailySummary',
+                (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
+                fallbackDates
+            );
 
-        // Heart Rate
+            if (summaryRaw.status === 'available') {
+                dailySummaryData = summaryRaw.data;
+            }
+        } catch (e) { console.error("Summary fetch failed"); }
+
+
+        // Extract metrics from the summary object
+        // The structure usually is: { totalSteps:..., bodyBatteryMostRecentValue:..., stressDuration:..., sleepingSeconds: ... }
+
+        // Construct standard response objects from this single source of truth if possible.
+        // If not sufficient, we can try other specific endpoints, but this one is the "Web Dashboard" one.
+
+        const sleepResult = {
+            status: dailySummaryData.sleepingSeconds ? 'available' : 'unavailable',
+            data: dailySummaryData // Pass full object, utils will extract
+        };
+
+        const bbResult = {
+            status: dailySummaryData.bodyBatteryMostRecentValue ? 'available' : 'unavailable',
+            data: dailySummaryData
+        };
+
+        const stressResult = {
+            status: dailySummaryData.stressDuration ? 'available' : 'unavailable',
+            data: dailySummaryData
+        };
+
+        const hrvResult = {
+            status: dailySummaryData.hrvStatus ? 'available' : 'unavailable',
+            data: dailySummaryData
+        };
+
+        // Heart Rate is usually separate (chart data).
+        // We stick to the old endpoint for detailed HR chart, or use summary resting HR.
         const heartRateResult = await fetchWithFallback(
             'dailyWellness.heartRate',
             (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/${userId}`,
             [todayStr]
-        );
-
-        // Daily Summary
-        const summaryResult = await fetchWithFallback(
-            'dailyWellness.summary',
-            (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
-            [todayStr, yesterdayStr]
-        );
+        ); // This one might still fail if not updated, but let's keep it 'best effort'.
 
 
         // --- RESPONSE ASSEMBLY ---
@@ -224,23 +232,20 @@ export async function POST(request: Request) {
                 age: calculateAge(userSettings?.userData?.birthDate),
             },
             cardio: {
-                vo2Max: null,
-                fitnessAge: null,
+                vo2Max: dailySummaryData.vo2MaxPrecise || null,
+                fitnessAge: dailySummaryData.fitnessAge || null,
                 heartRate: heartRateResult.data,
                 activities: activities
             },
             wellness: {
-                // Return result objects directly as Step 5 requested wrapper objects?
-                // Frontend expects { data: ... } inside mostly if we don't break types.
-                // garmin-utils checks: 'status' === 'available'.
-                // So returning the full result object matches the `status` requirement.
+                // Return structured objects with status
                 sleep: sleepResult,
                 bodyBattery: bbResult,
                 stress: stressResult,
                 hrv: hrvResult
             },
             lifestyle: {
-                summary: summaryResult.data
+                summary: dailySummaryData
             }
         };
 
