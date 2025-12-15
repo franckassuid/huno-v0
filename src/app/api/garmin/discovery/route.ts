@@ -44,25 +44,27 @@ export async function GET(request: Request) {
 
         const results: any[] = [];
 
-        // 3. Execute Matrix
-        for (const item of matrixRequest) {
+        // 3. Execute Matrix in Batches (to avoid Vercel 10s timeout)
+        // We have ~12-24 combinations. Serial = too slow.
 
-            // For each ID Type
+        const tasks: (() => Promise<void>)[] = [];
+
+        for (const item of matrixRequest) {
             for (const [idType, idValue] of Object.entries(ids)) {
                 if (!idValue) continue;
-
-                // VARIANT A: TODAY
-                await runTest(results, gc.client, item, idType, idValue, todayStr, 'today');
-
-                // VARIANT B: YESTERDAY
-                await runTest(results, gc.client, item, idType, idValue, yesterdayStr, 'yesterday');
-
-                // VARIANT C: RANGE (Last 7 Days) - Trying likely endpoint pattern
-                // Note: Range endpoints usually differ. 
-                // Common pattern: /wellness-service/wellness/{metric}/crud/{id}?startDate=...&endDate=...
-                // Only testing simple daily params for now as requested by user plan Step 2.
-                // "profileId + last7days" -> typically means getting range.
+                // Add variants
+                tasks.push(() => runTest(results, gc.client, item, idType, idValue, todayStr, 'today'));
+                tasks.push(() => runTest(results, gc.client, item, idType, idValue, yesterdayStr, 'yesterday'));
             }
+        }
+
+        console.log(`[DISCOVERY] Queued ${tasks.length} tasks. Executing in batches...`);
+
+        // Execute in chunks of 5
+        const CHUNK_SIZE = 5;
+        for (let i = 0; i < tasks.length; i += CHUNK_SIZE) {
+            const chunk = tasks.slice(i, i + CHUNK_SIZE);
+            await Promise.all(chunk.map(task => task()));
         }
 
         return NextResponse.json({
