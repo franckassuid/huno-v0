@@ -157,8 +157,9 @@ export async function POST(request: Request) {
                         logDebug(`Fetch Success (${featureName})`, { date: d });
                         return { status: 'available', date: d, data: data };
                     } else {
-                        logDebug(`Fetch Empty (${featureName})`, { date: d });
-                        console.log(`[EMPTY] ${featureName} @ ${d} returned empty.`);
+                        const rawSample = data ? JSON.stringify(data).slice(0, 200) : 'null';
+                        logDebug(`Fetch Empty (${featureName})`, { date: d, sample: rawSample });
+                        console.log(`[EMPTY] ${featureName} @ ${d} returned empty. Sample: ${rawSample}`);
                     }
                 } catch (e: any) {
                     lastError = e;
