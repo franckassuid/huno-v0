@@ -185,291 +185,192 @@ export async function POST(request: Request) {
         // The "usersummary/daily" endpoint actually contains ALL metrics in one go!
         // We should fetch it ONCE and dispatch the data.
 
+        // --- 4. FETCH DATA (Cleaner Stability-First Approach) ---
+
         let dailySummaryData: any = {};
         let summaryRaw: { status: string; data: any; date: string } = { status: 'unavailable', data: null, date: '' };
 
-        // TRY 1: The Browser API (gc-api) using Hardcore Mode
-        console.log(`[HARDCORE FETCH] Attempting gc-api with explicit headers...`);
+        // ATTEMPT 1: Modern Proxy (UserSummary)
+        summaryRaw = await fetchWithFallback(
+            'dailySummary.Proxy',
+            (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
+            fallbackDates
+        );
 
-        try {
-            const targetUrl = `https://connect.garmin.com/gc-api/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`; // Use first date (today)
+        // ATTEMPT 2: Legacy Wellness Service (If Proxy Empty)
+        // This is the "Classic" endpoint that might still be open
+        if (summaryRaw.status !== 'available') {
+            summaryRaw = await fetchWithFallback(
+                'dailySummary.WellnessLegacy',
+                // Note: 'date' param here, not calendarDate. And usually needs UUID.
+                (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySummary/${userId}?date=${d}`,
+                fallbackDates
+            );
+        }
 
-            logDebug('Fetch Attempt 1 (GC-API)', { url: targetUrl });
-
-            // Direct Axios call to bypass any library wrapping that might strip headers
-
-            // Safe Cookie Extraction 1
-            let cookieString = '';
-            try {
-                // @ts-ignore
-                const cookieJar = gc.client?.client?.defaults?.jar;
-                if (cookieJar && typeof cookieJar.getCookieString === 'function') {
-                    cookieString = await cookieJar.getCookieString(targetUrl);
-                }
-            } catch (cjErr) { console.error("Cookie extract 1 failed", cjErr); }
-
-
-            const headers = {
-                'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-                'NK': 'NT',
-                'Accept': '*/*',
-                'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Origin': 'https://connect.garmin.com',
-                'Referer': 'https://connect.garmin.com/modern/',
-                'Cookie': cookieString // Use safely retrieved string
-            };
-
-            console.log(`[HARDCORE FETCH] Effective URL: ${targetUrl}`);
-            console.log(`[HARDCORE FETCH] Effective Headers (partial): ${JSON.stringify(headers, null, 2).slice(0, 500)}...`);
-
-            const response = await gc.client.client.request({
-                method: 'GET',
-                url: targetUrl,
-                headers: headers
-            });
-
-            logDebug('Fetch 1 Result', { status: response.status, receivedData: response.data ? 'YES' : 'NO' });
-
-            if (response.data) {
-                summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
-                console.log("[HARDCORE SUCCESS] Data retrieved!");
-            }
-
-        } catch (err: any) {
-            console.error(`[HARDCORE FAIL] gc-api failed:`, err.message, err.response?.status);
-            logDebug('Fetch 1 Failed', { message: err.message, status: err.response?.status });
-
-            // Fallback to Proxy URL attempt with NUMERIC ID (Legacy support)
-            try {
-                const numericId = userProfile.profileId;
-                // Note: 'modern/proxy' is the base.
-                const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${numericId}?calendarDate=${fallbackDates[0]}`;
-                logDebug('Fetch Attempt 2 (Proxy + Numeric ID)', { url: proxyUrl });
-
-                // Safe Cookie Extraction 2
-                let cookieString2 = '';
-                try {
-                    // @ts-ignore
-                    const cookieJar2 = gc.client?.client?.defaults?.jar;
-                    if (cookieJar2 && typeof cookieJar2.getCookieString === 'function') {
-                        cookieString2 = await cookieJar2.getCookieString(proxyUrl);
-                    }
-                } catch (e) { }
-
-                const headers = {
-                    'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-                    'NK': 'NT',
-                    'Cookie': cookieString2
-                };
-                console.log(`[HARDCORE FETCH] Effective URL (Proxy): ${proxyUrl}`);
-                console.log(`[HARDCORE FETCH] Effective Headers (Proxy, partial): ${JSON.stringify(headers, null, 2).slice(0, 500)}...`);
-
-                const response = await gc.client.client.request({
-                    method: 'GET',
-                    url: proxyUrl,
-                    headers: headers
-                });
-
-                logDebug('Fetch 2 Result', { status: response.status, receivedData: response.data ? 'YES' : 'NO' });
-
-                if (response.data && Object.keys(response.data).length > 0) { // Ensure not empty
-                    summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
-                    console.log("[HARDCORE SUCCESS] Proxy retrieved with Numeric ID!");
-                }
-            } catch (e: any) {
-                console.error("[HARDCORE FAIL] Proxy also failed");
-                logDebug('Fetch 2 Failed', { message: e.message, status: e.response?.status });
-
-                // FAIL-SAFE ATTEMPT 3: Old Wellness Service (The "Classic" Endpoint)
-                try {
-                    // Note: 'date' parameter, NOT 'calendarDate'
-                    const wellnessUrl = `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySummary/${userId}?date=${fallbackDates[0]}`;
-                    logDebug('Fetch Attempt 3 (Wellness Service)', { url: wellnessUrl });
-
-                    // Safe Cookie Extraction 3
-                    let cookieString3 = '';
-                    try {
-                        // @ts-ignore
-                        const cookieJar3 = gc.client?.client?.defaults?.jar;
-                        if (cookieJar3 && typeof cookieJar3.getCookieString === 'function') {
-                            cookieString3 = await cookieJar3.getCookieString(wellnessUrl);
-                        }
-                    } catch (e) { }
-
-                    const response = await gc.client.client.request({
-                        method: 'GET',
-                        url: wellnessUrl,
-                        headers: {
-                            'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-                            'NK': 'NT',
-                            'Cookie': cookieString3
-                        }
-                    });
-
-                    logDebug('Fetch 3 Result', { status: response.status, receivedData: response.data ? 'YES' : 'NO' });
-                    if (response.data && Object.keys(response.data).length > 0) {
-                        summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
-                        console.log("[HARDCORE SUCCESS] Wellness Service retrieved!");
-                    }
-                } catch (err3: any) {
-                    logDebug('Fetch 3 Failed', { message: err3.message, status: err3.response?.status });
-                }
-            }
+        // ATTEMPT 3: Numeric ID Proxy (Last Resort)
+        if (summaryRaw.status !== 'available' && userProfile.profileId) {
+            summaryRaw = await fetchWithFallback(
+                'dailySummary.NumericProxy',
+                (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userProfile.profileId}`,
+                fallbackDates
+            );
         }
 
         if (summaryRaw.status === 'available') {
             dailySummaryData = summaryRaw.data;
-            console.log(`[DATA STRUCTURE] Keys received: ${JSON.stringify(Object.keys(dailySummaryData))}`);
-
-
-            // 5. PARSE DATA FOR FRONTEND (Universal Parser)
-
-            // --- SLEEP ---
-            // Summary has total seconds. Detailed chart usually comes from a separate 'dailySleepData' endpoint.
-            // If we only have summary, we'll show just the total score.
-            const sleepResult = {
-                status: (dailySummaryData.sleepingSeconds && dailySummaryData.sleepingSeconds > 0) ? 'available' : 'unavailable',
-                data: {
-                    dailySleepDTO: {
-                        sleepTimeSeconds: dailySummaryData.sleepingSeconds,
-                        deepSleepSeconds: dailySummaryData.deepSleepSeconds || 0,
-                        lightSleepSeconds: dailySummaryData.lightSleepSeconds || 0,
-                        remSleepSeconds: dailySummaryData.remSleepSeconds || 0
-                    }
-                }
-            };
-
-            // --- BODY BATTERY ---
-            // Check if we have the explicit array from the "Detailed Summary" JSON
-            // Structure based on User provided JSON: [timestamp, status, level, version]
-            let bbData = null;
-            if (dailySummaryData.bodyBatteryValuesArray) {
-                // Map to format suitable for graph: [{ date: ts, val: level }, ...]
-                bbData = dailySummaryData.bodyBatteryValuesArray.map((item: any[]) => ({
-                    date: item[0], // Timestamp
-                    val: item[2],  // Level
-                    // Extras
-                    status: item[1]
-                }));
-            } else if (dailySummaryData.bodyBatteryMostRecentValue !== undefined) {
-                // Fallback to single point if array missing
-                bbData = [{
-                    date: new Date().getTime(),
-                    val: dailySummaryData.bodyBatteryMostRecentValue,
-                    charged: dailySummaryData.bodyBatteryChargedValue,
-                    drained: dailySummaryData.bodyBatteryDrainedValue
-                }];
-            }
-
-            const bbResult = {
-                status: bbData ? 'available' : 'unavailable',
-                data: bbData
-            };
-
-            // --- STRESS ---
-            // Structure: [timestamp, level]
-            let stressData = null;
-            if (dailySummaryData.stressValuesArray) {
-                stressData = dailySummaryData.stressValuesArray.map((item: any[]) => ({
-                    x: item[0], // Timestamp
-                    y: item[1]  // Level
-                }));
-            } else if (dailySummaryData.averageStressLevel !== undefined) {
-                stressData = {
-                    avgStressLevel: dailySummaryData.averageStressLevel,
-                    maxStressLevel: dailySummaryData.maxStressLevel,
-                    stressDuration: dailySummaryData.stressDuration,
-                    stressQualifier: dailySummaryData.stressQualifier
-                };
-            }
-
-            const stressResult = {
-                status: stressData ? 'available' : 'unavailable',
-                data: stressData
-            };
-
-            // --- HRV ---
-            const hrvResult = {
-                status: 'unavailable',
-                data: null
-            };
-
-            // --- HEART RATE ---
-            // If we lost the graph (Activities Fetch blocked?), try to use min/max/resting from summary
-            // The detailed HR graph is usually fetched from /wellness-service/wellness/dailyHeartRate/{uuid}
-            // We will keep `heartRateResult.data` from the specific fetch we did earlier.
-
-            // Heart Rate is usually separate (chart data).
-            // We stick to the old endpoint for detailed HR chart, or use summary resting HR.
-            const heartRateResult = await fetchWithFallback(
-                'dailyWellness.heartRate',
-                (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/${userId}`,
-                [todayStr]
-            ); // This one might still fail if not updated, but let's keep it 'best effort'.
-
-            // Enhance Cardio
-            const cardioData = {
-                vo2Max: dailySummaryData.vo2MaxPrecise || null,
-                fitnessAge: dailySummaryData.fitnessAge || null,
-                restingHrToday: dailySummaryData.restingHeartRate,
-                minHrToday: dailySummaryData.minHeartRate,
-                maxHrToday: dailySummaryData.maxHeartRate,
-                heartRateValues: heartRateResult.data // Keep the detailed chart if it worked
-            };
-
-
-
-
-            // --- RESPONSE ASSEMBLY ---
-            const responseData = {
-                success: true,
-                timestamp: new Date().toISOString(),
-                _debug_trace: debugTrace,
-                debug_info: process.env.GARMIN_DEBUG === '1' ? {
-                    generated_at: new Date().toISOString(),
-                    user_id: userId,
-                    device_check: 'done'
-                } : undefined,
-                profile: {
-                    ...userProfile,
-                    // @ts-ignore
-                    weight: userSettings?.userData?.weight,
-                    // @ts-ignore
-                    height: userSettings?.userData?.height,
-                    // @ts-ignore
-                    age: calculateAge(userSettings?.userData?.birthDate),
-                },
-                cardio: {
-                    ...cardioData,
-                    activities: activities
-                },
-                wellness: {
-                    // Return structured objects with status
-                    sleep: sleepResult,
-                    bodyBattery: bbResult,
-                    stress: stressResult,
-                    hrv: hrvResult
-                },
-                lifestyle: {
-                    summary: dailySummaryData
-                }
-            };
-
-            // Cache Save
-            if (USE_CACHE) {
-                let fullCache: any = {};
-                try { if (fs.existsSync(cacheFile)) fullCache = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch (e) { }
-
-                fullCache[`${cacheUserKey}-${todayStr}`] = {
-                    timestamp: Date.now(),
-                    data: responseData
-                };
-                try { fs.writeFileSync(cacheFile, JSON.stringify(fullCache, null, 2)); } catch (e) { }
-            }
-
-            return NextResponse.json(responseData);
-
+            logDebug('Summary Data Acquired', { source: 'Success', keys: Object.keys(dailySummaryData) });
+        } else {
+            logDebug('Summary Data Failed', { message: 'All 3 endpoints returned empty/error' });
         }
+        // 5. PARSE DATA FOR FRONTEND (Universal Parser)
+
+        // --- SLEEP ---
+        // Summary has total seconds. Detailed chart usually comes from a separate 'dailySleepData' endpoint.
+        // If we only have summary, we'll show just the total score.
+        const sleepResult = {
+            status: (dailySummaryData.sleepingSeconds && dailySummaryData.sleepingSeconds > 0) ? 'available' : 'unavailable',
+            data: {
+                dailySleepDTO: {
+                    sleepTimeSeconds: dailySummaryData.sleepingSeconds,
+                    deepSleepSeconds: dailySummaryData.deepSleepSeconds || 0,
+                    lightSleepSeconds: dailySummaryData.lightSleepSeconds || 0,
+                    remSleepSeconds: dailySummaryData.remSleepSeconds || 0
+                }
+            }
+        };
+
+        // --- BODY BATTERY ---
+        // Check if we have the explicit array from the "Detailed Summary" JSON
+        // Structure based on User provided JSON: [timestamp, status, level, version]
+        let bbData = null;
+        if (dailySummaryData.bodyBatteryValuesArray) {
+            // Map to format suitable for graph: [{ date: ts, val: level }, ...]
+            bbData = dailySummaryData.bodyBatteryValuesArray.map((item: any[]) => ({
+                date: item[0], // Timestamp
+                val: item[2],  // Level
+                // Extras
+                status: item[1]
+            }));
+        } else if (dailySummaryData.bodyBatteryMostRecentValue !== undefined) {
+            // Fallback to single point if array missing
+            bbData = [{
+                date: new Date().getTime(),
+                val: dailySummaryData.bodyBatteryMostRecentValue,
+                charged: dailySummaryData.bodyBatteryChargedValue,
+                drained: dailySummaryData.bodyBatteryDrainedValue
+            }];
+        }
+
+        const bbResult = {
+            status: bbData ? 'available' : 'unavailable',
+            data: bbData
+        };
+
+        // --- STRESS ---
+        // Structure: [timestamp, level]
+        let stressData = null;
+        if (dailySummaryData.stressValuesArray) {
+            stressData = dailySummaryData.stressValuesArray.map((item: any[]) => ({
+                x: item[0], // Timestamp
+                y: item[1]  // Level
+            }));
+        } else if (dailySummaryData.averageStressLevel !== undefined) {
+            stressData = {
+                avgStressLevel: dailySummaryData.averageStressLevel,
+                maxStressLevel: dailySummaryData.maxStressLevel,
+                stressDuration: dailySummaryData.stressDuration,
+                stressQualifier: dailySummaryData.stressQualifier
+            };
+        }
+
+        const stressResult = {
+            status: stressData ? 'available' : 'unavailable',
+            data: stressData
+        };
+
+        // --- HRV ---
+        const hrvResult = {
+            status: 'unavailable',
+            data: null
+        };
+
+        // --- HEART RATE ---
+        // If we lost the graph (Activities Fetch blocked?), try to use min/max/resting from summary
+        // The detailed HR graph is usually fetched from /wellness-service/wellness/dailyHeartRate/{uuid}
+        // We will keep `heartRateResult.data` from the specific fetch we did earlier.
+
+        // Heart Rate is usually separate (chart data).
+        // We stick to the old endpoint for detailed HR chart, or use summary resting HR.
+        const heartRateResult = await fetchWithFallback(
+            'dailyWellness.heartRate',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/${userId}`,
+            [todayStr]
+        ); // This one might still fail if not updated, but let's keep it 'best effort'.
+
+        // Enhance Cardio
+        const cardioData = {
+            vo2Max: dailySummaryData.vo2MaxPrecise || null,
+            fitnessAge: dailySummaryData.fitnessAge || null,
+            restingHrToday: dailySummaryData.restingHeartRate,
+            minHrToday: dailySummaryData.minHeartRate,
+            maxHrToday: dailySummaryData.maxHeartRate,
+            heartRateValues: heartRateResult.data // Keep the detailed chart if it worked
+        };
+
+
+
+
+        // --- RESPONSE ASSEMBLY ---
+        const responseData = {
+            success: true,
+            timestamp: new Date().toISOString(),
+            _debug_trace: debugTrace,
+            debug_info: process.env.GARMIN_DEBUG === '1' ? {
+                generated_at: new Date().toISOString(),
+                user_id: userId,
+                device_check: 'done'
+            } : undefined,
+            profile: {
+                ...userProfile,
+                // @ts-ignore
+                weight: userSettings?.userData?.weight,
+                // @ts-ignore
+                height: userSettings?.userData?.height,
+                // @ts-ignore
+                age: calculateAge(userSettings?.userData?.birthDate),
+            },
+            cardio: {
+                ...cardioData,
+                activities: activities
+            },
+            wellness: {
+                // Return structured objects with status
+                sleep: sleepResult,
+                bodyBattery: bbResult,
+                stress: stressResult,
+                hrv: hrvResult
+            },
+            lifestyle: {
+                summary: dailySummaryData
+            }
+        };
+
+        // Cache Save
+        if (USE_CACHE) {
+            let fullCache: any = {};
+            try { if (fs.existsSync(cacheFile)) fullCache = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch (e) { }
+
+            fullCache[`${cacheUserKey}-${todayStr}`] = {
+                timestamp: Date.now(),
+                data: responseData
+            };
+            try { fs.writeFileSync(cacheFile, JSON.stringify(fullCache, null, 2)); } catch (e) { }
+        }
+
+        return NextResponse.json(responseData);
+
+
     } catch (error: any) {
         console.log("CRITICAL ERROR CAUGHT");
         console.error("CRITICAL API ERROR:", error);
