@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GarminConnect } from 'garmin-connect';
+import { garminFetch } from '@/lib/garmin-fetch';
 
 // --- PROXY CONFIGURATION START ---
 import { setGlobalDispatcher, ProxyAgent } from 'undici';
@@ -52,10 +53,20 @@ if (process.env.PROXY_URL) {
 }
 // --- PROXY CONFIGURATION END ---
 
+function logBootContext() {
+    const context = {
+        runtime: process.env.NEXT_RUNTIME || 'node',
+        region: process.env.VERCEL_REGION || 'local',
+        nodeVersion: process.version,
+        proxyProvider: process.env.PROXY_URL ? 'configured' : 'none',
+        serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        currentDateISO: new Date().toISOString()
+    };
+    console.log("BOOT CONTEXT:", JSON.stringify(context, null, 2));
+}
 
-// ... imports remain the same
-// ... imports remain the same
 export async function POST(request: Request) {
+    logBootContext();
     try {
         let email = '';
         let password = '';
@@ -79,6 +90,7 @@ export async function POST(request: Request) {
         if (email && password) {
             console.log("Explicit login requested with credentials.");
             const gcWithCreds = new GarminConnect({ username: email, password });
+
             try {
                 await gcWithCreds.login();
                 // Login successful, save new session
@@ -88,13 +100,12 @@ export async function POST(request: Request) {
                 sessionLoaded = true;
             } catch (loginErr) {
                 console.error("Login failed:", loginErr);
-                // If invalid credentials, we should probably stop here
                 throw loginErr;
             }
         }
         // SCENARIO 2: Auto-login / Refresh (No credentials, try session)
         else {
-            const gcSession = new GarminConnect();
+            const gcSession = new GarminConnect({ username: 'dummy', password: 'password' });
             if (fs.existsSync(sessionFile)) {
                 try {
                     console.log("Attempting to load session from file...");
@@ -108,133 +119,153 @@ export async function POST(request: Request) {
             }
         }
 
-        // If we still don't have an active GC instance (no creds, no valid session file)
         if (!activeGc || !sessionLoaded) {
             return NextResponse.json({ error: 'Credentials required or session expired' }, { status: 401 });
         }
 
-        // Use activeGc for subsequent calls
         const gcToUse = activeGc;
+
+        // --- 3. FIX HEADERS (Browser-like) ---
+        if (gcToUse.client && gcToUse.client.defaults && gcToUse.client.defaults.headers) {
+            console.log("Injecting browser-like headers...");
+            gcToUse.client.defaults.headers = {
+                ...gcToUse.client.defaults.headers,
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                // 'Referer': 'https://connect.garmin.com/', 
+                'Accept': 'application/json, text/plain, */*',
+                'nk': 'NT'
+            };
+        }
 
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-
-        // Cache Key (using email if available, otherwise 'session_user')
         const cacheUserKey = email || 'session_user';
 
         // --- CACHING STRATEGY ---
         const cacheFile = path.join('/tmp', 'garmin-cache.json');
         const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+        const USE_CACHE = process.env.GARMIN_DEBUG !== '1'; // Disable cache in debug mode
 
         let cachedData: any = {};
-        if (fs.existsSync(cacheFile)) {
+        if (USE_CACHE && fs.existsSync(cacheFile)) {
             try {
                 cachedData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
             } catch (e) { }
         }
 
-        const cacheKey = `${cacheUserKey} -${todayStr} `;
+        const cacheKey = `${cacheUserKey}-${todayStr}`;
         const userCache = cachedData[cacheKey];
 
-        if (userCache && (Date.now() - userCache.timestamp < CACHE_DURATION)) {
-            // console.log("Returning cached data");
-            return NextResponse.json(userCache.data);
+        if (USE_CACHE && userCache && (Date.now() - userCache.timestamp < CACHE_DURATION)) {
+            console.log("Returning cached data (duration check passed).");
+            // return NextResponse.json(userCache.data); 
         }
 
         // Helper to be nice to the API
         const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
         // --- FETCHING ---
-        // 1. PROFIL
         console.log("Fetching User Profile...");
         const userProfile = await gcToUse.getUserProfile();
-        console.log("User Profile Keys:", Object.keys(userProfile || {}));
+        // Use profileId (numeric) for wellness endpoints as displayName can be a UUID
+        const userId = userProfile.profileId || userProfile.displayName;
 
-        await sleep(500);
+        await sleep(200);
         console.log("Fetching User Settings...");
         const userSettings = await gcToUse.getUserSettings();
 
-        // DEBUG: Save raw data to file to inspect structure
+        // 1. ACTIVITIES (Manual)
+        console.log("Fetching Activities...");
+        let activities = [];
         try {
-            fs.writeFileSync(path.join('/tmp', 'garmin-debug.json'), JSON.stringify({
-                userProfile,
-                userSettings
-            }, null, 2));
-        } catch (e) { }
+            const actData = await garminFetch({
+                client: gcToUse.client,
+                url: 'https://connect.garmin.com/modern/proxy/activitylist-service/activities/search/activities',
+                featureName: 'activities',
+                params: { limit: 20, start: 0 }
+            });
+            activities = actData;
+        } catch (e) { console.error("Activities fetch failed", e); }
 
-        console.log("User Settings Keys:", Object.keys(userSettings || {}));
-        if (userSettings) console.log("User Settings Sample:", JSON.stringify(userSettings, null, 2).substring(0, 500)); // Log first 500 chars 
 
-        // Weight is often in userSettings.userDataProfile.weight (in grams usually)
+        // Helper for robust fetching
+        const fetchWithFallback = async (label: string, featureName: string, urlBuilder: (date: string) => string, dates: string[]) => {
+            for (const d of dates) {
+                try {
+                    const data = await garminFetch({
+                        client: gcToUse.client,
+                        url: urlBuilder(d),
+                        featureName,
+                        params: { date: d }
+                    });
 
-        // --- 2. CARDIO & FITNESS ---
-        // VO2 Max
-        let vo2MaxData = null;
-        try {
-            // @ts-ignore
-            vo2MaxData = await gcToUse.client.get(`https://connect.garmin.com/metrics-service/metrics/maxmet/daily/${todayStr}/${todayStr}`);
-        } catch (e) { }
-        await sleep(500);
+                    const isArray = Array.isArray(data);
+                    const hasKeys = data && typeof data === 'object' && Object.keys(data).length > 0;
 
-        // Fitness Age
-        let fitnessData = null;
-        try {
-            // @ts-ignore
-            fitnessData = await gcToUse.client.get(`https://connect.garmin.com/metrics-service/metrics/fitnessage/latest`);
-        } catch (e) { }
-        await sleep(500);
-
-        // Heart Rate
-        // @ts-ignore
-        const heartRate = await gcToUse.getHeartRate(today);
-        await sleep(500);
-
-        // Activities
-        const activities = await gcToUse.getActivities(0, 5);
-        await sleep(500);
-
-        // --- 3. SOMMEIL ---
-        // @ts-ignore
-        const sleepData = await gcToUse.getSleepData(today);
-        await sleep(500);
-
-        // --- 4. WELLNESS ---
-        // Body Battery
-        let bodyBattery = null;
-        try {
-            // @ts-ignore
-            bodyBattery = await gcToUse.client.get(`https://connect.garmin.com/wellness-service/wellness/dailyBodyBattery/${todayStr}/${todayStr}`);
-        } catch (e) { }
-        await sleep(500);
-
-        // Stress
-        let stress = null;
-        try {
-            // @ts-ignore
-            stress = await gcToUse.client.get(`https://connect.garmin.com/wellness-service/wellness/dailyStress/${todayStr}/${todayStr}`);
-        } catch (e) { }
-        await sleep(300);
-
-        // HRV
-        let hrvStatus = null;
-        try {
-            // @ts-ignore
-            hrvStatus = await gcToUse.client.get(`https://connect.garmin.com/hrv-service/hrv/daily/${todayStr}/${todayStr}`);
-        } catch (e) { }
-        await sleep(300);
-
-        // --- 5. LIFESTYLE ---
-        // Daily Summary
-        let dailySummary = null;
-        try {
-            // @ts-ignore
-            const summaries = await gcToUse.client.get(`https://connect.garmin.com/usersummary-service/usersummary/daily/${todayStr}/${todayStr}`);
-            if (Array.isArray(summaries) && summaries.length > 0) {
-                dailySummary = summaries[0];
+                    if (data && (isArray || hasKeys)) {
+                        return { status: 'available', date: d, data: data };
+                    }
+                } catch (e) {
+                    // garminFetch logs error, we just continue
+                }
             }
-        } catch (e) { }
+            return { status: 'unavailable', data: null };
+        };
 
-        // Helper to calculate age from birthDate
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        const twoDaysAgo = new Date(today);
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+        const twoDaysAgoStr = twoDaysAgo.toISOString().split('T')[0];
+
+        // 2. SLEEP (Manual with Fallback)
+        console.log("Fetching Sleep Data...");
+        const sleepResult = await fetchWithFallback(
+            'Sleep',
+            'dailyWellness.sleep',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySleepData/${userId}`,
+            [todayStr, yesterdayStr, twoDaysAgoStr]
+        );
+
+        // 3. HEART RATE
+        console.log("Fetching Heart Rate...");
+        const heartRateResult = await fetchWithFallback(
+            'HeartRate',
+            'dailyWellness.heartRate',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/${userId}`,
+            [todayStr]
+        );
+
+        // 4. WELLNESS
+        console.log("--- WELLNESS FETCHING (Robust Mode) ---");
+
+        // A. Body Battery
+        const bbResult = await fetchWithFallback('BodyBattery', 'dailyWellness.bodyBattery',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/bodyBattery/daily/${userId}`,
+            [todayStr]
+        );
+
+        // B. Stress
+        const stressResult = await fetchWithFallback('Stress', 'dailyWellness.stress',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyStress/${userId}`,
+            [todayStr]
+        );
+
+        // C. HRV
+        const hrvResult = await fetchWithFallback('HRV', 'dailyWellness.hrv',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/hrv/daily/${userId}`,
+            [yesterdayStr, todayStr, twoDaysAgoStr]
+        );
+
+        // D. Daily Summary (Bonus)
+        const summaryResult = await fetchWithFallback('DailySummary', 'dailyWellness.summary',
+            (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
+            [todayStr]
+        );
+
+
         const calculateAge = (birthDate: string) => {
             if (!birthDate) return null;
             const diff = Date.now() - new Date(birthDate).getTime();
@@ -246,43 +277,45 @@ export async function POST(request: Request) {
             profile: {
                 ...userProfile,
                 // @ts-ignore
-                weight: userSettings?.userData?.weight, // grams based on debug file
+                weight: userSettings?.userData?.weight,
                 // @ts-ignore
-                height: userSettings?.userData?.height, // cm
+                height: userSettings?.userData?.height,
                 // @ts-ignore
                 age: calculateAge(userSettings?.userData?.birthDate),
             },
             cardio: {
-                // @ts-ignore
-                vo2Max: vo2MaxData || (userSettings?.userData?.vo2MaxRunning ? [{ vo2MaxPrecise: userSettings.userData.vo2MaxRunning }] : null),
-                fitnessAge: fitnessData,
-                heartRate: heartRate,
+                vo2Max: null,
+                fitnessAge: null,
+                heartRate: heartRateResult.data,
                 activities: activities
             },
-            sleep: sleepData,
             wellness: {
-                bodyBattery,
-                stress,
-                hrv: hrvStatus
+                // Return structured objects with status
+                sleep: sleepResult,
+                bodyBattery: bbResult,
+                stress: stressResult,
+                hrv: hrvResult
             },
             lifestyle: {
-                summary: dailySummary
+                summary: summaryResult.data
             }
         };
 
         // Save to cache
-        cachedData[cacheKey] = {
-            timestamp: Date.now(),
-            data: responseData
-        };
-        try {
-            fs.writeFileSync(cacheFile, JSON.stringify(cachedData, null, 2));
-        } catch (e) { }
+        if (USE_CACHE) {
+            cachedData[cacheKey] = {
+                timestamp: Date.now(),
+                data: responseData
+            };
+            try { fs.writeFileSync(cacheFile, JSON.stringify(cachedData, null, 2)); } catch (e) { }
+        }
 
         return NextResponse.json(responseData);
 
     } catch (error: any) {
-        console.error('Garmin API Error:', error);
+        console.error('🔥 CRITICAL GARMIN API ERROR 🔥');
+        console.error('Message:', error.message);
+        console.error('Stack:', error.stack);
 
         const errorMessage = error.message || error.toString();
 
@@ -294,8 +327,9 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({
-            error: 'Garmin Connection Error (Possible Rate Limit)',
-            details: errorMessage
+            error: 'Garmin Connection Error',
+            details: errorMessage,
+            fullError: error.toString()
         }, { status: 500 });
     }
 }
