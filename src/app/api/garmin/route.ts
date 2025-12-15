@@ -198,10 +198,16 @@ export async function POST(request: Request) {
 
             // Direct Axios call to bypass any library wrapping that might strip headers
 
-            // Access CookieJar safely (it's hidden deep in the library)
-            // @ts-ignore
-            const cookieJar = gc.client.client.defaults.jar;
-            const cookieString = cookieJar ? await cookieJar.getCookieString(targetUrl) : '';
+            // Safe Cookie Extraction 1
+            let cookieString = '';
+            try {
+                // @ts-ignore
+                const cookieJar = gc.client?.client?.defaults?.jar;
+                if (cookieJar && typeof cookieJar.getCookieString === 'function') {
+                    cookieString = await cookieJar.getCookieString(targetUrl);
+                }
+            } catch (cjErr) { console.error("Cookie extract 1 failed", cjErr); }
+
 
             const headers = {
                 'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
@@ -240,10 +246,15 @@ export async function POST(request: Request) {
                 const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${numericId}?calendarDate=${fallbackDates[0]}`;
                 logDebug('Fetch Attempt 2 (Proxy + Numeric ID)', { url: proxyUrl });
 
-                // Fallback Cookie Logic
-                // @ts-ignore
-                const cookieJar2 = gc.client.client.defaults.jar;
-                const cookieString2 = cookieJar2 ? await cookieJar2.getCookieString(proxyUrl) : '';
+                // Safe Cookie Extraction 2
+                let cookieString2 = '';
+                try {
+                    // @ts-ignore
+                    const cookieJar2 = gc.client?.client?.defaults?.jar;
+                    if (cookieJar2 && typeof cookieJar2.getCookieString === 'function') {
+                        cookieString2 = await cookieJar2.getCookieString(proxyUrl);
+                    }
+                } catch (e) { }
 
                 const headers = {
                     'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
@@ -275,9 +286,15 @@ export async function POST(request: Request) {
                     const wellnessUrl = `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySummary/${userId}?date=${fallbackDates[0]}`;
                     logDebug('Fetch Attempt 3 (Wellness Service)', { url: wellnessUrl });
 
-                    // @ts-ignore
-                    const cookieJar3 = gc.client.client.defaults.jar;
-                    const cookieString3 = cookieJar3 ? await cookieJar3.getCookieString(wellnessUrl) : '';
+                    // Safe Cookie Extraction 3
+                    let cookieString3 = '';
+                    try {
+                        // @ts-ignore
+                        const cookieJar3 = gc.client?.client?.defaults?.jar;
+                        if (cookieJar3 && typeof cookieJar3.getCookieString === 'function') {
+                            cookieString3 = await cookieJar3.getCookieString(wellnessUrl);
+                        }
+                    } catch (e) { }
 
                     const response = await gc.client.client.request({
                         method: 'GET',
