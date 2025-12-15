@@ -182,6 +182,12 @@ export async function POST(request: Request) {
             logDebug('Fetch Attempt 1 (GC-API)', { url: targetUrl });
 
             // Direct Axios call to bypass any library wrapping that might strip headers
+
+            // Access CookieJar safely (it's hidden deep in the library)
+            // @ts-ignore
+            const cookieJar = gc.client.client.defaults.jar;
+            const cookieString = cookieJar ? await cookieJar.getCookieString(targetUrl) : '';
+
             const headers = {
                 'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
                 'NK': 'NT',
@@ -189,8 +195,9 @@ export async function POST(request: Request) {
                 'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
                 'Origin': 'https://connect.garmin.com',
                 'Referer': 'https://connect.garmin.com/modern/',
-                'Cookie': await gc.client.getCookieString(targetUrl) // Ensure cookies are attached!
+                'Cookie': cookieString // Use safely retrieved string
             };
+
             console.log(`[HARDCORE FETCH] Effective URL: ${targetUrl}`);
             console.log(`[HARDCORE FETCH] Effective Headers (partial): ${JSON.stringify(headers, null, 2).slice(0, 500)}...`);
 
@@ -215,10 +222,15 @@ export async function POST(request: Request) {
             try {
                 const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`;
                 logDebug('Fetch Attempt 2 (Proxy)', { url: proxyUrl });
+                // Fallback Cookie Logic
+                // @ts-ignore
+                const cookieJar2 = gc.client.client.defaults.jar;
+                const cookieString2 = cookieJar2 ? await cookieJar2.getCookieString(proxyUrl) : '';
+
                 const headers = {
                     'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
                     'NK': 'NT',
-                    'Cookie': await gc.client.getCookieString(proxyUrl)
+                    'Cookie': cookieString2
                 };
                 console.log(`[HARDCORE FETCH] Effective URL (Proxy): ${proxyUrl}`);
                 console.log(`[HARDCORE FETCH] Effective Headers (Proxy, partial): ${JSON.stringify(headers, null, 2).slice(0, 500)}...`);
