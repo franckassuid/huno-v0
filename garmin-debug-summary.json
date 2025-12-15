@@ -1,0 +1,105 @@
+{
+  "activities": {
+    "successCount": 2,
+    "errorCount": 1,
+    "lastErrorType": null,
+    "p95Latency": 106,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      106,
+      66,
+      101
+    ],
+    "lastStatus": 200
+  },
+  "dailyWellness.sleep": {
+    "successCount": 6,
+    "errorCount": 3,
+    "lastErrorType": null,
+    "p95Latency": 30,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      30,
+      21,
+      19,
+      18,
+      20,
+      18,
+      27,
+      23,
+      19
+    ],
+    "lastStatus": 200
+  },
+  "dailyWellness.heartRate": {
+    "successCount": 2,
+    "errorCount": 1,
+    "lastErrorType": null,
+    "p95Latency": 27,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      17,
+      23,
+      27
+    ],
+    "lastStatus": 200
+  },
+  "dailyWellness.bodyBattery": {
+    "successCount": 2,
+    "errorCount": 1,
+    "lastErrorType": null,
+    "p95Latency": 28,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      28,
+      17,
+      20
+    ],
+    "lastStatus": 200
+  },
+  "dailyWellness.stress": {
+    "successCount": 2,
+    "errorCount": 1,
+    "lastErrorType": null,
+    "p95Latency": 24,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      16,
+      19,
+      24
+    ],
+    "lastStatus": 200
+  },
+  "dailyWellness.hrv": {
+    "successCount": 6,
+    "errorCount": 3,
+    "lastErrorType": null,
+    "p95Latency": 25,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      17,
+      21,
+      19,
+      25,
+      20,
+      20,
+      20,
+      24,
+      17
+    ],
+    "lastStatus": 200
+  },
+  "dailyWellness.summary": {
+    "successCount": 2,
+    "errorCount": 1,
+    "lastErrorType": null,
+    "p95Latency": 24,
+    "lastResponseSnippet": "{}",
+    "latencies": [
+      19,
+      24,
+      19
+    ],
+    "lastStatus": 200
+  }
+}
