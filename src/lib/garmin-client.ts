@@ -75,12 +75,14 @@ export async function getAuthenticatedGarminClient(email?: string, password?: st
 
     // INJECT HEADERS
     if (client.client && client.client.defaults && client.client.defaults.headers) {
-        client.client.defaults.headers = {
-            ...client.client.defaults.headers,
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'nk': 'NT'
-        };
+        // 4. Inject Verified Headers (from successful cURL)
+        // These are critical for accessing the new /gc-api/ endpoints
+        client.client.defaults.headers.common['User-Agent'] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
+        client.client.defaults.headers.common['NK'] = 'NT'; // Critical Garmin Header
+        client.client.defaults.headers.common['accept'] = '*/*';
+        client.client.defaults.headers.common['accept-language'] = 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7';
+        client.client.defaults.headers.common['origin'] = 'https://connect.garmin.com';
+        client.client.defaults.headers.common['referer'] = 'https://connect.garmin.com/modern/';
     }
 
     return client;
