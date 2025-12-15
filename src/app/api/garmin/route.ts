@@ -164,29 +164,68 @@ export async function POST(request: Request) {
         // We should fetch it ONCE and dispatch the data.
 
         let dailySummaryData: any = {};
+        let summaryRaw: { status: string; data: any; date: string } = { status: 'unavailable', data: null, date: '' };
+
+        // TRY 1: The Browser API (gc-api) using Hardcore Mode
+        console.log(`[HARDCORE FETCH] Attempting gc-api with explicit headers...`);
 
         try {
-            // TRY 1: The Browser API (gc-api)
-            let summaryRaw = await fetchWithFallback(
-                'verified.dailySummary_GC',
-                (d) => `https://connect.garmin.com/gc-api/usersummary-service/usersummary/daily/${userId}`,
-                fallbackDates
-            );
+            const targetUrl = `https://connect.garmin.com/gc-api/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`; // Use first date (today)
 
-            // TRY 2: The Legacy Proxy (modern/proxy) if first fails
-            if (summaryRaw.status !== 'available') {
-                summaryRaw = await fetchWithFallback(
-                    'verified.dailySummary_Proxy',
-                    (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
-                    fallbackDates
-                );
+            // Direct Axios call to bypass any library wrapping that might strip headers
+            const headers = {
+                'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+                'NK': 'NT',
+                'Accept': '*/*',
+                'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Origin': 'https://connect.garmin.com',
+                'Referer': 'https://connect.garmin.com/modern/',
+                'Cookie': await gc.client.getCookieString(targetUrl) // Ensure cookies are attached!
+            };
+            console.log(`[HARDCORE FETCH] Effective URL: ${targetUrl}`);
+            console.log(`[HARDCORE FETCH] Effective Headers (partial): ${JSON.stringify(headers, null, 2).slice(0, 500)}...`);
+
+            const response = await gc.client.client.request({
+                method: 'GET',
+                url: targetUrl,
+                headers: headers
+            });
+
+            if (response.data) {
+                summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
+                console.log("[HARDCORE SUCCESS] Data retrieved!");
             }
 
-            if (summaryRaw.status === 'available') {
-                dailySummaryData = summaryRaw.data;
-                console.log(`[DATA STRUCTURE] Keys received: ${JSON.stringify(Object.keys(dailySummaryData))}`);
-            }
-        } catch (e) { console.error("Summary fetch failed"); }
+        } catch (err: any) {
+            console.error(`[HARDCORE FAIL] gc-api failed:`, err.message, err.response?.status);
+
+            // Fallback to Proxy URL attempt
+            try {
+                const proxyUrl = `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}?calendarDate=${fallbackDates[0]}`;
+                const headers = {
+                    'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+                    'NK': 'NT',
+                    'Cookie': await gc.client.getCookieString(proxyUrl)
+                };
+                console.log(`[HARDCORE FETCH] Effective URL (Proxy): ${proxyUrl}`);
+                console.log(`[HARDCORE FETCH] Effective Headers (Proxy, partial): ${JSON.stringify(headers, null, 2).slice(0, 500)}...`);
+
+                const response = await gc.client.client.request({
+                    method: 'GET',
+                    url: proxyUrl,
+                    headers: headers
+                });
+                if (response.data) {
+                    summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
+                    console.log("[HARDCORE SUCCESS] Proxy retrieved!");
+                }
+            } catch (e) { console.error("[HARDCORE FAIL] Proxy also failed"); }
+        }
+
+        if (summaryRaw.status === 'available') {
+            dailySummaryData = summaryRaw.data;
+            console.log(`[DATA STRUCTURE] Keys received: ${JSON.stringify(Object.keys(dailySummaryData))}`);
+        }
 
 
         // 5. PARSE DATA FOR FRONTEND (Universal Parser)
