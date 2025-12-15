@@ -30,10 +30,25 @@ export async function POST(request: Request) {
         // --- 1. AUTHENTICATION ---
         // DEBUG TRACE STORAGE
         const debugTrace: any[] = [];
-        const logDebug = (label: string, details: any) => {
-            console.log(`[DEBUG] ${label}`, details);
-            debugTrace.push({ time: new Date().toISOString(), label, ...details });
+
+        // Helper for safe JSON stringify
+        const safeStringify = (obj: any) => {
+            try {
+                const str = JSON.stringify(obj);
+                return str ? str.slice(0, 500) : 'undefined';
+            } catch (e) {
+                return '[Circular/Unserializable]';
+            }
         };
+
+        // Update logDebug to be safer
+        const logDebug = (label: string, details: any) => {
+            try {
+                console.log(`[DEBUG] ${label}`, safeStringify(details)); // Log safe version
+                debugTrace.push({ time: new Date().toISOString(), label, details: safeStringify(details) });
+            } catch (e) { console.error("Logger failed", e); }
+        };
+
 
         let email = '';
         let password = '';
@@ -207,7 +222,7 @@ export async function POST(request: Request) {
                 headers: headers
             });
 
-            logDebug('Fetch 1 Result', { status: response.status, dataSlice: JSON.stringify(response.data).slice(0, 200) });
+            logDebug('Fetch 1 Result', { status: response.status, receivedData: response.data ? 'YES' : 'NO' });
 
             if (response.data) {
                 summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
@@ -216,7 +231,7 @@ export async function POST(request: Request) {
 
         } catch (err: any) {
             console.error(`[HARDCORE FAIL] gc-api failed:`, err.message, err.response?.status);
-            logDebug('Fetch 1 Failed', { message: err.message, status: err.response?.status, data: err.response?.data });
+            logDebug('Fetch 1 Failed', { message: err.message, status: err.response?.status });
 
             // Fallback to Proxy URL attempt with NUMERIC ID (Legacy support)
             try {
@@ -244,7 +259,7 @@ export async function POST(request: Request) {
                     headers: headers
                 });
 
-                logDebug('Fetch 2 Result', { status: response.status, dataSlice: JSON.stringify(response.data).slice(0, 200) });
+                logDebug('Fetch 2 Result', { status: response.status, receivedData: response.data ? 'YES' : 'NO' });
 
                 if (response.data && Object.keys(response.data).length > 0) { // Ensure not empty
                     summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
@@ -274,7 +289,7 @@ export async function POST(request: Request) {
                         }
                     });
 
-                    logDebug('Fetch 3 Result', { status: response.status, dataSlice: JSON.stringify(response.data).slice(0, 200) });
+                    logDebug('Fetch 3 Result', { status: response.status, receivedData: response.data ? 'YES' : 'NO' });
                     if (response.data && Object.keys(response.data).length > 0) {
                         summaryRaw = { status: 'available', data: response.data, date: fallbackDates[0] };
                         console.log("[HARDCORE SUCCESS] Wellness Service retrieved!");
