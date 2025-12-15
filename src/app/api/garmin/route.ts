@@ -189,52 +189,82 @@ export async function POST(request: Request) {
         } catch (e) { console.error("Summary fetch failed"); }
 
 
-        // Create cleaner result objects directly from the Summary Source of Truth
+        // 5. PARSE DATA FOR FRONTEND (Universal Parser)
 
+        // --- SLEEP ---
+        // Summary has total seconds. Detailed chart usually comes from a separate 'dailySleepData' endpoint.
+        // If we only have summary, we'll show just the total score.
         const sleepResult = {
             status: (dailySummaryData.sleepingSeconds && dailySummaryData.sleepingSeconds > 0) ? 'available' : 'unavailable',
             data: {
-                dailySleepDTO: { // Mock DTO structure to match garmin-utils expectations
+                dailySleepDTO: {
                     sleepTimeSeconds: dailySummaryData.sleepingSeconds,
-                    deepSleepSeconds: null, // Summary doesn't provide stages
-                    lightSleepSeconds: null,
-                    remSleepSeconds: null
+                    deepSleepSeconds: dailySummaryData.deepSleepSeconds || 0,
+                    lightSleepSeconds: dailySummaryData.lightSleepSeconds || 0,
+                    remSleepSeconds: dailySummaryData.remSleepSeconds || 0
                 }
             }
         };
 
+        // --- BODY BATTERY ---
+        // Check if we have the explicit array from the "Detailed Summary" JSON
+        // Structure based on User provided JSON: [timestamp, status, level, version]
+        let bbData = null;
+        if (dailySummaryData.bodyBatteryValuesArray) {
+            // Map to format suitable for graph: [{ date: ts, val: level }, ...]
+            bbData = dailySummaryData.bodyBatteryValuesArray.map((item: any[]) => ({
+                date: item[0], // Timestamp
+                val: item[2],  // Level
+                // Extras
+                status: item[1]
+            }));
+        } else if (dailySummaryData.bodyBatteryMostRecentValue !== undefined) {
+            // Fallback to single point if array missing
+            bbData = [{
+                date: new Date().getTime(),
+                val: dailySummaryData.bodyBatteryMostRecentValue,
+                charged: dailySummaryData.bodyBatteryChargedValue,
+                drained: dailySummaryData.bodyBatteryDrainedValue
+            }];
+        }
+
         const bbResult = {
-            status: dailySummaryData.bodyBatteryMostRecentValue !== undefined ? 'available' : 'unavailable',
-            data: [ // Mock array structure for garmin-utils
-                {
-                    date: dailySummaryData.calendarDate,
-                    charged: dailySummaryData.bodyBatteryChargedValue,
-                    drained: dailySummaryData.bodyBatteryDrainedValue,
-                    high: dailySummaryData.bodyBatteryHighestValue,
-                    low: dailySummaryData.bodyBatteryLowestValue,
-                    val: dailySummaryData.bodyBatteryMostRecentValue
-                } // utils might need adjusting if it expects strictly [timestamp, value] pairs. 
-                // But let's send this rich object and update utils next.
-            ]
+            status: bbData ? 'available' : 'unavailable',
+            data: bbData
         };
 
-        const stressResult = {
-            status: dailySummaryData.averageStressLevel !== undefined ? 'available' : 'unavailable',
-            data: {
+        // --- STRESS ---
+        // Structure: [timestamp, level]
+        let stressData = null;
+        if (dailySummaryData.stressValuesArray) {
+            stressData = dailySummaryData.stressValuesArray.map((item: any[]) => ({
+                x: item[0], // Timestamp
+                y: item[1]  // Level
+            }));
+        } else if (dailySummaryData.averageStressLevel !== undefined) {
+            stressData = {
                 avgStressLevel: dailySummaryData.averageStressLevel,
                 maxStressLevel: dailySummaryData.maxStressLevel,
                 stressDuration: dailySummaryData.stressDuration,
-                restStressDuration: dailySummaryData.restStressDuration,
                 stressQualifier: dailySummaryData.stressQualifier
-            }
+            };
+        }
+
+        const stressResult = {
+            status: stressData ? 'available' : 'unavailable',
+            data: stressData
         };
 
+        // --- HRV ---
         const hrvResult = {
-            // HRV is NOT in the UserSummary JSON provided. 
-            // We'll mark it unavailable unless we fetch it separately successfully.
             status: 'unavailable',
             data: null
         };
+
+        // --- HEART RATE ---
+        // If we lost the graph (Activities Fetch blocked?), try to use min/max/resting from summary
+        // The detailed HR graph is usually fetched from /wellness-service/wellness/dailyHeartRate/{uuid}
+        // We will keep `heartRateResult.data` from the specific fetch we did earlier.
 
         // Heart Rate is usually separate (chart data).
         // We stick to the old endpoint for detailed HR chart, or use summary resting HR.
@@ -244,7 +274,7 @@ export async function POST(request: Request) {
             [todayStr]
         ); // This one might still fail if not updated, but let's keep it 'best effort'.
 
-        // Enhance Cardio with Summary Data
+        // Enhance Cardio
         const cardioData = {
             vo2Max: dailySummaryData.vo2MaxPrecise || null,
             fitnessAge: dailySummaryData.fitnessAge || null,
@@ -253,6 +283,8 @@ export async function POST(request: Request) {
             maxHrToday: dailySummaryData.maxHeartRate,
             heartRateValues: heartRateResult.data // Keep the detailed chart if it worked
         };
+
+
 
 
         // --- RESPONSE ASSEMBLY ---
