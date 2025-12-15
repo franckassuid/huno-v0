@@ -166,14 +166,25 @@ export async function POST(request: Request) {
         let dailySummaryData: any = {};
 
         try {
-            const summaryRaw = await fetchWithFallback(
-                'verified.dailySummary',
-                (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
+            // TRY 1: The Browser API (gc-api)
+            let summaryRaw = await fetchWithFallback(
+                'verified.dailySummary_GC',
+                (d) => `https://connect.garmin.com/gc-api/usersummary-service/usersummary/daily/${userId}`,
                 fallbackDates
             );
 
+            // TRY 2: The Legacy Proxy (modern/proxy) if first fails
+            if (summaryRaw.status !== 'available') {
+                summaryRaw = await fetchWithFallback(
+                    'verified.dailySummary_Proxy',
+                    (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
+                    fallbackDates
+                );
+            }
+
             if (summaryRaw.status === 'available') {
                 dailySummaryData = summaryRaw.data;
+                console.log(`[DATA STRUCTURE] Keys received: ${JSON.stringify(Object.keys(dailySummaryData))}`);
             }
         } catch (e) { console.error("Summary fetch failed"); }
 
