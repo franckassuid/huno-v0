@@ -137,13 +137,16 @@ export async function POST(request: Request) {
                     const data = await garminFetch({
                         client: gc.client,
                         url: urlBuilder(d),
-                        featureName,
-                        params: { calendarDate: d } // CHANGED: param name is 'calendarDate' for user-summary
+                        featureName
+                        // params removed: URL builder handles query params
                     });
 
                     // Raw logging per user request (Step 1)
                     if (process.env.GARMIN_DEBUG === '1') {
-                        console.log(`RAW RESPONSE (${featureName}):`, JSON.stringify(data).slice(0, 500));
+                        // Safely log
+                        try {
+                            console.log(`RAW RESPONSE (${featureName}):`, JSON.stringify(data).slice(0, 50));
+                        } catch (e) { }
                     }
 
                     const isArray = Array.isArray(data);
@@ -151,12 +154,15 @@ export async function POST(request: Request) {
                     const isValid = data && (isArray || Object.keys(data).length > 0);
 
                     if (isValid) {
+                        logDebug(`Fetch Success (${featureName})`, { date: d });
                         return { status: 'available', date: d, data: data };
                     } else {
+                        logDebug(`Fetch Empty (${featureName})`, { date: d });
                         console.log(`[EMPTY] ${featureName} @ ${d} returned empty.`);
                     }
                 } catch (e: any) {
                     lastError = e;
+                    logDebug(`Fetch Fail (${featureName})`, { date: d, error: e.message, status: e.response?.status });
                     console.error(`[FAIL] ${featureName} @ ${d}: ${e.message}`);
                 }
             }
