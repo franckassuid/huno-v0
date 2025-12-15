@@ -185,9 +185,11 @@ export async function POST(request: Request) {
         // The "usersummary/daily" endpoint actually contains ALL metrics in one go!
         // We should fetch it ONCE and dispatch the data.
 
-        // --- 4. FETCH DATA (Cleaner Stability-First Approach) ---
-
+        // --- 4. FETCH DATA (SKIPPED FOR DEBUG) ---
+        console.log("SKIP FETCHING FOR DEBUG - TESTING AUTH ONLY");
         let dailySummaryData: any = {};
+
+        /*
         let summaryRaw: any = { status: 'unavailable', data: null, date: '' };
 
         // ATTEMPT 1: Modern Proxy (UserSummary)
@@ -223,6 +225,7 @@ export async function POST(request: Request) {
         } else {
             logDebug('Summary Data Failed', { message: 'All 3 endpoints returned empty/error' });
         }
+        */
         // 5. PARSE DATA FOR FRONTEND (Universal Parser)
 
         // --- SLEEP ---
