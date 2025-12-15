@@ -9,6 +9,11 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         // Default to today/yesterday if not provided
+        const extractParam = (name: string) => searchParams.get(name) || undefined;
+
+        const email = extractParam('email');
+        const password = extractParam('password');
+
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
 
@@ -22,8 +27,8 @@ export async function GET(request: Request) {
 
         console.log(`[DISCOVERY] Starting Matrix Test...`);
 
-        // 1. Auth & IDs
-        const gc = await getAuthenticatedGarminClient();
+        // 1. Auth & IDs (Pass explicit creds if provided in URL)
+        const gc = await getAuthenticatedGarminClient(email, password);
         const profile = await gc.getUserProfile();
 
         const ids = {
