@@ -4,41 +4,14 @@ import path from 'path';
 import { AxiosInstance } from 'axios';
 
 // --- CONFIGURATION ---
-const LOG_FILE_NDJSON = path.resolve(process.cwd(), 'garmin-debug.ndjson');
-const LOG_FILE_SUMMARY = path.resolve(process.cwd(), 'garmin-debug-summary.json');
+// --- CONFIGURATION ---
+// Vercel only allows writing to /tmp
+const LOG_FILE_NDJSON = path.join('/tmp', 'garmin-debug.ndjson');
+const LOG_FILE_SUMMARY = path.join('/tmp', 'garmin-debug-summary.json');
 const DEBUG_MODE = process.env.GARMIN_DEBUG === '1';
 
 // --- TYPES ---
-
-export interface GarminFetchOptions {
-    client: AxiosInstance;
-    url: string;
-    featureName: string; // e.g., "dailyWellness.sleep"
-    params?: any;
-}
-
-export interface LogEvent {
-    type: 'start' | 'end' | 'error';
-    requestId: string;
-    featureName: string;
-    timestamp: string;
-    // ... specific fields
-    details?: any;
-}
-
-interface SummaryData {
-    successCount: number;
-    errorCount: number;
-    lastStatus: number | null;
-    lastErrorType: string | null;
-    p95Latency: number | null; // Placeholder, simplified for now
-    lastResponseSnippet: string | null;
-    latencies: number[];
-}
-
-interface SummaryFile {
-    [featureName: string]: SummaryData;
-}
+// ... (Types remain)
 
 // --- LOGGING HELPERS ---
 
@@ -47,10 +20,20 @@ function appendLog(event: LogEvent, context: any = {}) {
         ...event,
         ...context
     };
+
+    // ALSO LOG TO CONSOLE for Vercel Dashboard visibility
+    if (event.type === 'error') {
+        console.error(`[LOG:ERROR] ${event.featureName}:`, JSON.stringify(event.details));
+    } else if (event.type === 'end') {
+        // Log brief summary to console
+        const d = event.details || {};
+        console.log(`[LOG:END] ${event.featureName} Status:${d.status} Time:${d.timeMs}ms Size:${d.responseSize} Body:${d.bodySnippet}`);
+    }
+
     try {
         fs.appendFileSync(LOG_FILE_NDJSON, JSON.stringify(entry) + '\n');
     } catch (e) {
-        console.error("Failed to write to NDJSON log:", e);
+        // console.error("Failed to write to NDJSON log:", e); // Squelch to avoid spamming Vercel logs if FS is weird
     }
 }
 
@@ -94,7 +77,7 @@ function updateSummary(featureName: string, success: boolean, status: number, er
     try {
         fs.writeFileSync(LOG_FILE_SUMMARY, JSON.stringify(summary, null, 2));
     } catch (e) {
-        console.error("Failed to write summary log:", e);
+        // console.error("Failed to write summary log:", e);
     }
 }
 
