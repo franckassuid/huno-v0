@@ -192,44 +192,50 @@ export async function POST(request: Request) {
         // The "usersummary/daily" endpoint actually contains ALL metrics in one go!
         // We should fetch it ONCE and dispatch the data.
 
-        // --- 4. FETCH DATA ---
+        // --- 4. FETCH DATA (Targeted Approach) ---
 
+        // We will fetch multiple endpoints and merge them to reconstruct the full "Summary"
         let dailySummaryData: any = {};
-        let summaryRaw: any = { status: 'unavailable', data: null, date: '' };
 
-        // ATTEMPT 1: Modern Proxy (UserSummary)
-        summaryRaw = await fetchWithFallback(
-            'dailySummary.Proxy',
+        // A. Main User Summary (General Info, Steps, etc.)
+        const summaryFetch = await fetchWithFallback(
+            'userData.summary',
             (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userId}`,
             fallbackDates
         );
-
-        // ATTEMPT 2: Legacy Wellness Service (If Proxy Empty)
-        // This is the "Classic" endpoint that might still be open
-        if (summaryRaw.status !== 'available') {
-            summaryRaw = await fetchWithFallback(
-                'dailySummary.WellnessLegacy',
-                // Note: 'date' param here, not calendarDate. And usually needs UUID.
-                (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySummary/${userId}?date=${d}`,
-                fallbackDates
-            );
+        if (summaryFetch.status === 'available') {
+            dailySummaryData = { ...dailySummaryData, ...summaryFetch.data };
         }
 
-        // ATTEMPT 3: Numeric ID Proxy (Last Resort)
-        if (summaryRaw.status !== 'available' && userProfile.profileId) {
-            summaryRaw = await fetchWithFallback(
-                'dailySummary.NumericProxy',
-                (d) => `https://connect.garmin.com/modern/proxy/usersummary-service/usersummary/daily/${userProfile.profileId}`,
-                fallbackDates
-            );
+        // B. Daily Stress & Body Battery (The User Verified Endpoint!)
+        // URL: .../dailyStress/YYYY-MM-DD
+        const stressFetch = await fetchWithFallback(
+            'wellness.stress',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyStress/${d}`,
+            fallbackDates
+        );
+        if (stressFetch.status === 'available') {
+            logDebug('Stress Data Found', { keys: Object.keys(stressFetch.data) });
+            dailySummaryData = { ...dailySummaryData, ...stressFetch.data };
+            // Explicitly map if keys differ, but usually they merge well
         }
 
-        if (summaryRaw.status === 'available') {
-            dailySummaryData = summaryRaw.data;
-            logDebug('Summary Data Acquired', { source: 'Success', keys: Object.keys(dailySummaryData) });
-        } else {
-            logDebug('Summary Data Failed', { message: 'All 3 endpoints returned empty/error' });
+        // C. Daily Sleep Data (Detailed curves)
+        const sleepFetch = await fetchWithFallback(
+            'wellness.sleep',
+            (d) => `https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailySleepData/${userId}?date=${d}`,
+            fallbackDates
+        );
+        if (sleepFetch.status === 'available') {
+            logDebug('Sleep Data Found', { keys: Object.keys(sleepFetch.data) });
+            // Usually returns 'dailySleepDTO' or similar
+            if (sleepFetch.data.dailySleepDTO) {
+                dailySummaryData.dailySleepDTO = sleepFetch.data.dailySleepDTO;
+                // Also merge top level keys if any
+                dailySummaryData = { ...dailySummaryData, ...sleepFetch.data };
+            }
         }
+
         // 5. PARSE DATA FOR FRONTEND (Universal Parser)
 
         // --- SLEEP ---
