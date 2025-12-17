@@ -1,13 +1,23 @@
 import { spawn } from 'child_process';
 import path from 'path';
 
-export async function fetchGarminDataFromPython(email?: string, password?: string, requestHeaders: HeadersInit = {}): Promise<any> {
+export async function fetchGarminDataFromPython(
+    email?: string,
+    password?: string,
+    requestHeaders: HeadersInit = {},
+    baseUrl?: string
+): Promise<any> {
 
     // Check if running on Vercel (Production/Preview)
     // VERCEL_URL is automatically set by Vercel
     if (process.env.VERCEL_URL) {
-        const protocol = 'https'; // Vercel is always https
-        const url = `${protocol}://${process.env.VERCEL_URL}/api/garmin_py`;
+        let url;
+        if (baseUrl) {
+            url = `${baseUrl}/api/garmin_py`;
+        } else {
+            const protocol = 'https'; // Vercel is always https
+            url = `${protocol}://${process.env.VERCEL_URL}/api/garmin_py`;
+        }
 
         console.log("🚀 VERCEL DETECTED: Fetching from Python Serverless Function:", url);
 
@@ -22,6 +32,9 @@ export async function fetchGarminDataFromPython(email?: string, password?: strin
             // Remove host header to avoid conflicts
             if (fetchHeaders['host']) delete fetchHeaders['host'];
             if (fetchHeaders['content-length']) delete fetchHeaders['content-length'];
+
+            // Also delete connection header if present as it's hop-by-hop
+            if (fetchHeaders['connection']) delete fetchHeaders['connection'];
 
             const res = await fetch(url, {
                 method: 'POST',

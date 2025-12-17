@@ -19,8 +19,13 @@ export async function POST(request: Request) {
             }
         });
 
+        // Determine Base URL for internal API call
+        const host = request.headers.get('host') || '';
+        const protocol = request.headers.get('x-forwarded-proto') || 'https';
+        const baseUrl = host ? `${protocol}://${host}` : undefined;
+
         console.log("[API] Fetching Garmin data...");
-        const rawJson = await fetchGarminDataFromPython(email, password, headers);
+        const rawJson = await fetchGarminDataFromPython(email, password, headers, baseUrl);
 
         // DEBUG: Write raw JSON to file
         try {
