@@ -10,7 +10,8 @@ import { buildHunoProfile, HunoProfile, generateFinalJson } from '../../lib/garm
 import { InfoTooltip } from '../../components/InfoTooltip';
 import { MetricCard } from '../../components/MetricCard';
 import { CircularProgress } from '../../components/CircularProgress';
-import { HeartRateChart } from '../../components/HeartRateChart';
+import { TimeSeriesChart } from '../../components/TimeSeriesChart';
+
 import garminCache from '../../../garmin-cache.json';
 
 export default function Profile() {
@@ -64,7 +65,7 @@ export default function Profile() {
 
             // 2. Fetch Live Data
             try {
-                const res = await fetch('/api/garmin', {
+                const res = await fetch('/api/garmin/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({}),
@@ -141,6 +142,21 @@ export default function Profile() {
 
                 <div className="flex items-center gap-3">
                     <button onClick={() => {
+                        // Create a blob and download it
+                        const jsonStr = JSON.stringify(rawData, null, 2);
+                        const blob = new Blob([jsonStr], { type: "application/json" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `garmin-data-${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white" title="Télécharger JSON">
+                        <Database className="w-6 h-6" />
+                    </button>
+                    <button onClick={() => {
                         let onboardingData = {};
                         try {
                             const local = localStorage.getItem('huno-onboarding-data');
@@ -183,11 +199,25 @@ export default function Profile() {
 
             {/* Profile Identity Card */}
             <section className="glass-card p-8 flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-visible z-10">
+                {/* ... existing identity card content ... */}
                 <div className="relative group shrink-0">
                     <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-4xl md:text-5xl font-bold text-white shadow-lg shadow-blue-500/20 ring-4 ring-white/5">
                         {profile.identity.fullName ? profile.identity.fullName.charAt(0).toUpperCase() : <User />}
                     </div>
-                    <div className="absolute -bottom-2 -right-2 w-6 h-6 md:w-8 md:h-8 bg-green-500 rounded-full border-4 border-[#18181b]" title="Connecté" />
+                    {/* Device Photo Overlay */}
+                    {profile.devices && profile.devices.length > 0 && (
+                        <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-[#18181b] rounded-xl border border-white/10 p-1 shadow-xl flex items-center justify-center overflow-hidden" title={profile.devices[0].productDisplayName}>
+                            {/* Using a generic placeholder for specific device, or just the first device's image if available in URL (Garmin provides imageUrl sometimes) */}
+                            {/* Since we don't have exact URLs, we'll try to use the one from device object if it exists, roughly */}
+                            {/* For now, just a watch icon or the name */}
+                            <img
+                                src={`https://res.garmin.com/en/products/${profile.devices[0].partNumber}/v/cf-lg.jpg`}
+                                onError={(e) => (e.currentTarget.src = 'https://static.garmincdn.com/en/products/010-02540-10/v/cf-md.jpg')}
+                                alt="Device"
+                                className="w-full h-full object-contain"
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-grow text-center md:text-left space-y-4">
@@ -202,6 +232,7 @@ export default function Profile() {
                     </div>
 
                     <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                        {/* Existing badges ... */}
                         <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm font-medium">
                             <TrendingUp className="w-4 h-4" />
                             Niveau {profile.garminMeta.userLevel}
@@ -210,6 +241,18 @@ export default function Profile() {
                             {profile.garminMeta.userPoints} Points
                         </span>
                     </div>
+
+                    {/* Devices list */}
+                    {profile.devices && profile.devices.length > 0 && (
+                        <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
+                            {profile.devices.map((device: any, i: number) => (
+                                <span key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400">
+                                    <span className={`w-2 h-2 rounded-full ${device.wifiConnected ? 'bg-green-500' : 'bg-gray-500'}`}></span>
+                                    {device.productDisplayName}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </section>
 
@@ -242,10 +285,28 @@ export default function Profile() {
             {/* METRICS DASHBOARD (Moved from Home) */}
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 relative z-10">
 
+                {/* Steps Card */}
+                <div className="md:col-span-1"> {/* Adjust grid span if needed */}
+                    <MetricCard
+                        title="Pas"
+                        icon={Flame} // Or footsteps icon if available
+                        value={profile.lifestyleStatus.steps || 0}
+                        unit="pas"
+                        colorClass="text-emerald-400"
+                        tooltip="Nombre de pas effectués aujourd'hui."
+                        subtitle={
+                            <div className="flex justify-between items-center text-xs text-gray-400">
+                                <span>Hier: <span className="text-white font-mono">{(profile.lifestyleStatus as any).stepsYesterday || '--'}</span> pas</span>
+                            </div>
+                        }
+                    />
+                </div>
+
                 {/* Main Health: Sleep (Large) */}
-                <div className="md:col-span-2 lg:col-span-2 row-span-1 min-h-[280px]">
+                <div className="md:col-span-2 lg:col-span-1 row-span-1"> {/* Adjusted span to fit steps */}
                     <MetricCard
                         title="Sommeil"
+                        // ... (keep existing props)
                         icon={Moon}
                         value={profile.wellnessStatus.sleep.totalSleepSeconds
                             ? `${Math.floor(profile.wellnessStatus.sleep.totalSleepSeconds / 3600)}h ${Math.floor((profile.wellnessStatus.sleep.totalSleepSeconds % 3600) / 60)}`
@@ -294,7 +355,15 @@ export default function Profile() {
                         trend={profile.cardioStatus.maxHrToday ? `Max ${profile.cardioStatus.maxHrToday}` : undefined}
                         tooltip="Graphe de votre fréquence cardiaque au fil de la journée."
                         subtitle={`Moyenne sur 7 jours : ${profile.cardioStatus.restingHr7dAvg || '--'} bpm`}
-                        graph={<HeartRateChart data={profile.cardioStatus.heartRateValues} />}
+                        graph={
+                            <TimeSeriesChart
+                                data={profile.cardioStatus.heartRateValues}
+                                color="#f87171"
+                                unit="bpm"
+                                minY={30}
+                                maxY={190}
+                            />
+                        }
                     />
                 </div>
 

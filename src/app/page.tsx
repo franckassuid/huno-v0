@@ -45,7 +45,7 @@ export default function Home() {
       } catch (e) { }
 
       setIsRestoring(true);
-      fetch('/api/garmin', { method: 'POST', body: JSON.stringify({}) })
+      fetch('/api/garmin/data', { method: 'POST', body: JSON.stringify({}) })
         .then(async res => {
           if (res.ok) {
             const json = await res.json();
@@ -78,14 +78,14 @@ export default function Home() {
 
     try {
       const payload = (email && password) ? { email, password } : {};
-      const res = await fetch('/api/garmin', {
+      const res = await fetch('/api/garmin/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       const json = await res.json();
-      if (res.status === 401) throw new Error("Session expirée.");
+      if (res.status === 401) throw new Error(json.error || "Session expirée.");
       if (!res.ok) throw new Error(json.error || 'Login failed');
 
       console.log("🔥 GARMIN API RESPONSE (Login):", json);
@@ -280,9 +280,9 @@ export default function Home() {
               <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Body Battery</span>
               <div className="flex items-end gap-1">
                 <span className="text-lg font-bold text-blue-400 leading-none">
-                  {hunoProfile.wellnessStatus.bodyBattery && hunoProfile.wellnessStatus.bodyBattery[0]
-                    ? (hunoProfile.wellnessStatus.bodyBattery[0].charged ?? '--')
-                    : '--'}
+                  {hunoProfile.wellnessStatus.bodyBattery && hunoProfile.wellnessStatus.bodyBattery[0]?.bodyBatteryValuesArray
+                    ? hunoProfile.wellnessStatus.bodyBattery[0].bodyBatteryValuesArray.slice(-1)[0][1]
+                    : (hunoProfile.wellnessStatus.bodyBattery?.[0]?.bodyBatteryLevelValue ?? '--')}
                 </span>
                 <span className="text-xs text-blue-500/60 font-medium mb-0.5">%</span>
               </div>
@@ -317,7 +317,7 @@ export default function Home() {
           </div>
         </button>
 
-        {/* Hier */}
+        {/* Aujourd'hui */}
         <div className="glass-card p-4 flex flex-col gap-3 hover:bg-white/5 transition-colors">
           <div className="flex justify-between items-start">
             <div className="p-2 bg-orange-500/10 rounded-lg text-orange-400"><Footprints className="w-5 h-5" /></div>
@@ -326,9 +326,9 @@ export default function Home() {
             </span>
           </div>
           <div>
-            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Pas Hier</span>
+            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Aujourd'hui</span>
             <div className="text-white font-semibold text-sm mt-0.5 truncate">
-              {hunoProfile.recentActivities[0]?.sport?.replace(/_/g, ' ') || 'Repos'}
+              {hunoProfile.dailySummary?.stepsGoal ? `${Math.round((hunoProfile.dailySummary.steps || 0) / hunoProfile.dailySummary.stepsGoal * 100)}% Objectif` : 'Pas de but'}
             </div>
           </div>
         </div>

@@ -21,6 +21,8 @@ export interface GarminData {
     lifestyle?: {
         summary?: any;
     };
+    devices?: any[];
+    history?: any[];
 }
 
 // --- INTERFACES: HUNO PROFILE (Destination) ---
@@ -67,6 +69,13 @@ export interface HunoProfile {
             remSleepSeconds: number | null;
         };
     };
+    lifestyleStatus: {
+        steps: number | null;
+        stepsYesterday: number | null;
+        stepsGoal: number | null;
+        activeCalories: number | null;
+        totalCalories: number | null;
+    };
     recentActivities: {
         activityId: number;
         name: string;
@@ -95,6 +104,7 @@ export interface HunoProfile {
         activeCalories: number | null;
         totalCalories: number | null;
     } | null;
+    devices: any[];
 }
 
 // --- HELPER FUNCTIONS ---
@@ -143,7 +153,7 @@ export function buildHunoProfile(garminData: GarminData): HunoProfile {
             nextLevelThreshold: p.levelPointThreshold ?? null
         },
         cardioStatus: {
-            vo2Max: vo2?.vo2MaxPrecise ?? null,
+            vo2Max: vo2?.vo2MaxPrecise ?? p.userData?.vo2MaxRunning ?? p.userData?.vo2MaxCycling ?? null,
             restingHrToday: hr.restingHeartRate ?? null,
             restingHr7dAvg: hr.lastSevenDaysAvgRestingHeartRate ?? null,
             minHrToday: hr.minHeartRate ?? null,
@@ -181,6 +191,13 @@ export function buildHunoProfile(garminData: GarminData): HunoProfile {
             moderateMinutes: a.moderateIntensityMinutes ?? null,
             vigorousMinutes: a.vigorousIntensityMinutes ?? null
         })),
+        lifestyleStatus: {
+            steps: lifestyle.steps ?? null,
+            stepsYesterday: lifestyle.stepsYesterday ?? null,
+            stepsGoal: lifestyle.goal ?? null,
+            activeCalories: lifestyle.activeCalories ?? null,
+            totalCalories: lifestyle.totalCalories ?? null
+        },
         dataFreshness: {
             profileLastUpdated: p.levelUpdateDate ?? null,
             lastHrDate: hr.calendarDate ?? null,
@@ -191,7 +208,8 @@ export function buildHunoProfile(garminData: GarminData): HunoProfile {
             stepsGoal: lifestyle.goal ?? null,
             activeCalories: lifestyle.activeCalories ?? null,
             totalCalories: lifestyle.totalCalories ?? null
-        }
+        },
+        devices: garminData.devices || []
     };
 }
 
