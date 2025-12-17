@@ -4,7 +4,7 @@ interface MetricCardProps {
     title: string;
     value: string | number;
     unit?: string;
-    icon?: React.ElementType;
+    icon?: React.ComponentType<{ className?: string }>;
     subtitle?: React.ReactNode;
     colorClass?: string;
     bgGradient?: string;

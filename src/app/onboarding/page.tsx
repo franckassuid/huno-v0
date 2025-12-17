@@ -8,7 +8,7 @@ import {
     Timer, Trophy, User, Zap, AlertCircle, Moon, Plus, Minus, X, Loader2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import garminCache from '../../../garmin-cache.json';
+import { calculateTrainingRecommendation } from '../../services/recommendation/engine';
 
 // --- DATA TYPES ---
 
@@ -40,11 +40,6 @@ const BodyMap = ({ gender, selectedZones, onToggleZone }: { gender: string, sele
 
     // Determines the image based on gender
     const imageSrc = gender === 'Femme' ? '/body-map-woman.png' : '/body-map-man.png';
-
-    // UPDATED ZONES KEYS to match INJURY_DATA key
-    // Adjusted positions for the new image (normalized to 320x600 approximately)
-    // UPDATED ZONES KEYS to match INJURY_DATA key
-    // Adjusted positions for the new image (normalized to 320x600 approximately)
 
     // Male: Wider shoulders, narrower hips
     const maleZones = [
@@ -78,18 +73,13 @@ const BodyMap = ({ gender, selectedZones, onToggleZone }: { gender: string, sele
 
     return (
         <div className="relative w-full max-w-[220px] md:max-w-[260px] mx-auto animate-in fade-in zoom-in duration-700 my-0 md:my-2">
-            {/* Glow / Aura */}
             <div className="absolute inset-0 bg-blue-500/10 blur-[50px] rounded-full" />
-
             <div className="relative w-full h-auto aspect-[160/300]">
-                {/* New Generated Image */}
                 <img
                     src={imageSrc}
                     alt={`Body Map ${gender}`}
                     className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(59,130,246,0.3)] opacity-90"
                 />
-
-                {/* SVG Overlay for Interactive Zones */}
                 <svg viewBox="0 0 320 600" className="absolute inset-0 w-full h-full overflow-visible">
                     {zones.map((zone) => {
                         const isSelected = selectedZones.includes(zone.id);
@@ -121,8 +111,6 @@ const BodyMap = ({ gender, selectedZones, onToggleZone }: { gender: string, sele
                                     strokeWidth="2"
                                     className="group-hover:fill-white/10 transition-all duration-300"
                                 />
-
-                                {/* Hover Label */}
                                 {isHovered && (
                                     <g pointerEvents="none" className="hidden md:block">
                                         <rect
@@ -151,8 +139,6 @@ const BodyMap = ({ gender, selectedZones, onToggleZone }: { gender: string, sele
                     })}
                 </svg>
             </div>
-
-            {/* Legend - Tighter spacing */}
             <div className="absolute top-4 -right-12 md:-right-8 flex flex-col items-start gap-1.5 pointer-events-none">
                 {zones.filter(z => selectedZones.includes(z.id)).map(z => (
                     <div key={z.id} className="pointer-events-auto animate-in slide-in-from-left fade-in duration-300 bg-red-500/20 backdrop-blur-md border border-red-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold text-red-100 shadow-xl flex items-center gap-1.5">
@@ -203,7 +189,7 @@ const INJURY_DATA = [
         ]
     },
     {
-        "id": "upper_arm", // Not on direct body map but good to have
+        "id": "upper_arm",
         "label": "Bras",
         "issues": [
             { "id": "biceps_tendinitis", "label": "Tendinite bicipitale" },
@@ -291,21 +277,30 @@ const INJURY_DATA = [
     }
 ];
 
-// --- MAIN PAGE ---
-
-import { calculateTrainingRecommendation } from '../../lib/fitness-engine';
-
-// ... (existing imports)
-
-// ... (existing helper functions if any)
-
 export default function OnboardingPage() {
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState<Record<string, any>>({});
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // --- RECOMMENDATION ENGINE ---
+    // Load data for pre-fill
+    useEffect(() => {
+        setIsLoaded(true);
+        try {
+            const cached = localStorage.getItem('huno-data-cache');
+            if (cached) {
+                const profile = JSON.parse(cached);
+                if (profile && profile.identity) {
+                    setAnswers(prev => ({
+                        ...prev,
+                        age: profile.identity.age,
+                        height: profile.identity.heightCm,
+                        weight: profile.identity.weightKg
+                    }));
+                }
+            }
+        } catch (e) { }
+    }, []);
 
     // 1. Calculate Injury Severity first to pass it correctly
     const injuryZonesRaw = (answers['injury_zones'] as string[]) || [];
@@ -350,80 +345,9 @@ export default function OnboardingPage() {
         }
     });
 
-    // Load data for pre-fill
-    useEffect(() => {
-        setIsLoaded(true);
-        try {
-            const cacheAny = garminCache as any;
-            const keys = Object.keys(cacheAny);
-            if (keys.length > 0) {
-                const data = cacheAny[keys[0]]?.data;
-                const profile = data?.profile;
+    // --- QUESTIONS ---
 
-                if (profile) {
-                    setAnswers(prev => ({
-                        ...prev,
-                        age: profile.age,
-                        height: profile.height, // cm from Garmin
-                        weight: profile.weight ? Math.round(profile.weight / 1000) : undefined // g -> kg
-                    }));
-                }
-            }
-        } catch (e) {
-            console.error("Failed to load cache for onboarding", e);
-        }
-    }, []);
-
-    // ... (baseQuestions definitions)
-
-
-    // --- VALIDATION HELPER ---
-    const getDurationValidation = () => {
-        if (currentQ?.id !== 'session_duration') return { status: 'ok', message: null };
-
-        const sessionsPerWeek = answers['sessions_per_week'] || recommendation.recommendedSessionsPerWeek;
-        const duration = answers['session_duration'] || 0; // Current slider value
-
-        // Use displayed val (defaulting to recommendation if 0) for calculation
-        const displayedDuration = duration || recommendation.recommendedSessionDurationMin;
-
-        // 1. Check against the EXPLICIT recommendation (Practical Baseline)
-        // If the user is at or above the *recommended* counts, it is ALWAYS valid, 
-        // even if it falls short of the theoretical "targetWeeklyMinutes" (volume).
-        const recommendedVolume = recommendation.recommendedSessionsPerWeek * recommendation.recommendedSessionDurationMin;
-        const userVolume = sessionsPerWeek * displayedDuration;
-
-        if (userVolume >= recommendedVolume * 0.95) {
-            return { status: 'ok', message: null };
-        }
-
-        // 2. Fallback: Check against theoretical target (if they customized it differently)
-        const volumeRatio = userVolume / recommendation.targetWeeklyMinutes;
-
-        if (volumeRatio < 0.6) {
-            return {
-                status: 'error',
-                message: 'Avec cette fréquence et cette durée, il sera très difficile d’atteindre ton objectif dans les temps. Tu peux soit augmenter la durée de tes séances, soit revenir en arrière pour augmenter le nombre de séances.'
-            };
-        }
-        if (volumeRatio < 0.8) {
-            return {
-                status: 'warning',
-                message: 'C’est un peu léger pour ton objectif, mais ça reste jouable si tu es régulier.'
-            };
-        }
-        return { status: 'ok', message: null };
-    };
-
-
-
-
-    // --- DYNAMIC QUESTIONS CONST ---
-    // Removed useMemo to ensure dynamic injury questions update immediately when answers change
-    // This avoids stale closure issues or memoization delays with complex dependencies
     const baseQuestions: Question[] = [
-
-        // SECTION 1: Profil Physique
         {
             id: 'sex',
             section: 'Profil Physique',
@@ -457,8 +381,6 @@ export default function OnboardingPage() {
             type: 'slider',
             min: 30, max: 200, unit: 'kg'
         },
-
-        // SECTION 2: Objectifs
         {
             id: 'main_goal',
             section: 'Objectifs',
@@ -523,15 +445,12 @@ export default function OnboardingPage() {
                 { label: 'Régularité', value: 'habit', icon: Activity },
             ]
         },
-
-        // SECTION 3: Organisation
-
         {
             id: 'training_place',
             section: 'Organisation',
             title: 'Lieu d\'entraînement',
             subtitle: 'Plusieurs choix possibles.',
-            type: 'multi-choice', // Changed to multi-choice
+            type: 'multi-choice',
             options: [
                 { label: 'Maison', value: 'home', icon: Home },
                 { label: 'Salle', value: 'gym', icon: Dumbbell },
@@ -552,11 +471,8 @@ export default function OnboardingPage() {
                 { label: 'Barre de traction', value: 'pullup_bar', icon: Ruler },
                 { label: 'Step / Box', value: 'step', icon: Layers },
                 { label: 'Aucun matériel', value: 'none', icon: Ban },
-                // Conditional Logic update handled below
             ]
         },
-
-        // SECTION 4: Blessures
         {
             id: 'has_injuries',
             section: 'Santé',
@@ -575,14 +491,12 @@ export default function OnboardingPage() {
             subtitle: 'Touchez le corps pour indiquer les zones.',
             type: 'body-map',
             conditional: { questionId: 'has_injuries', value: 'yes' }
-        },
+        }
     ];
 
     // ADD MACHINE OPTION DYNAMICALLY
-    const trainingPlace = (answers['training_place'] as string[]) || []; // Now an array
+    const trainingPlace = (answers['training_place'] as string[]) || [];
     const hasGym = trainingPlace.includes('gym');
-
-    // Find equipment question to inject machines if needed
     const equipmentQ = baseQuestions.find(q => q.id === 'equipment');
     if (equipmentQ && hasGym) {
         if (!equipmentQ.options?.find(o => o.value === 'machines')) {
@@ -590,11 +504,9 @@ export default function OnboardingPage() {
         }
     }
 
-    // DYNAMIC INJURY LOOP
-    const injuryZones = (answers['injury_zones'] as string[]) || [];
+    // DYNAMIC INJURY QUESTIONS
     const injuryQuestions: Question[] = [];
-
-    injuryZones.forEach(zone => {
+    injuryZonesRaw.forEach(zone => {
         const zoneData = INJURY_DATA.find(z => z.id === zone);
         const zoneLabel = zoneData?.label || zone;
         const issueOptions = zoneData?.issues.map(i => ({ label: i.label, value: i.id })) || [{ label: 'Autre', value: 'other' }];
@@ -635,9 +547,6 @@ export default function OnboardingPage() {
         );
     });
 
-    // Add Movements to Avoid at the end of injury section, if injuries exist OR generic check
-
-    // Always ask movements to avoid
     const hasInjuries = answers['has_injuries'] === 'yes';
     injuryQuestions.push({
         id: `global_avoid_movements`,
@@ -647,7 +556,6 @@ export default function OnboardingPage() {
             ? `En raison de tes blessures ou simplement parce que tu n'aimes pas ces mouvements.`
             : `Y a-t-il des mouvements que tu n'aimes pas ou qui te mettent mal à l'aise ?`,
         type: 'multi-choice',
-        // conditional: { questionId: 'has_injuries', value: 'yes' }, // REMOVED to show always
         options: [
             { label: 'Sauts', value: 'jumps', icon: Activity },
             { label: 'Courses (impacts)', value: 'running', icon: Timer },
@@ -660,13 +568,10 @@ export default function OnboardingPage() {
     });
 
     // 3. Dynamic Duration Adjustment
-    // If user selected a custom frequency, adapt the recommended duration to match target volume
     const selectedFreq = answers['sessions_per_week'] || recommendation.recommendedSessionsPerWeek;
     const adjustedDuration = Math.max(5, Math.min(90, Math.round((recommendation.targetWeeklyMinutes / selectedFreq) / 5) * 5));
 
-    // Continue with LEVEL
     const levelQuestions: Question[] = [
-        // 6. Préférences
         {
             id: 'preferred_intensity',
             section: 'Préférences',
@@ -675,7 +580,6 @@ export default function OnboardingPage() {
             type: 'slider',
             min: 1, max: 10, unit: '/ 10'
         },
-        // 7. Lifestyle (moved from base questions)
         {
             id: 'sleep_quality',
             section: 'Mode de vie',
@@ -712,7 +616,6 @@ export default function OnboardingPage() {
                 { label: 'Élevé', value: 'high', icon: Flame },
             ]
         },
-        // 8. Tests physiques
         {
             id: 'pushups_count',
             section: 'Niveau Actuel',
@@ -750,7 +653,6 @@ export default function OnboardingPage() {
                 { label: 'Je ne sais pas', value: 'unknown', icon: Info },
             ]
         },
-        // 9. Reco Fréquence
         {
             id: 'sessions_per_week',
             section: 'Organisation',
@@ -759,7 +661,6 @@ export default function OnboardingPage() {
             type: 'slider',
             min: 1, max: 7, unit: 'séances'
         },
-        // 10. Reco Durée
         {
             id: 'session_duration',
             section: 'Organisation',
@@ -772,7 +673,6 @@ export default function OnboardingPage() {
 
     const questions = [...baseQuestions, ...injuryQuestions, ...levelQuestions];
 
-    // activeQuestions logic - removed useMemo to force re-calc
     const activeQuestions = questions.filter(q => {
         if (!q.conditional) return true;
         return answers[q.conditional.questionId] === q.conditional.value;
@@ -780,39 +680,59 @@ export default function OnboardingPage() {
 
     const currentQ = activeQuestions[currentStep];
 
-    // --- AUTO-FILL DEFAULTS EFFECT (Re-inserted correctly) ---
+    // --- AUTO-FILL DEFAULTS ---
     useEffect(() => {
         if (!currentQ) return;
-
         const key = currentQ.id;
         const val = answers[key];
 
         if (key === 'sessions_per_week' && val === undefined) {
             setAnswers(prev => ({ ...prev, [key]: recommendation.recommendedSessionsPerWeek }));
         } else if (key === 'session_duration') {
-            // For duration, we might want to update it if the recommendation (adjusted) changed
-            // But to avoid fighting the user, we should probably check if it matches the OLD recommendation?
-            // Simplest is to only set if undefined, OR if we want to be smart, set it.
-            // Given user feedback "blocked", let's strictly use undefined for safety first.
-            // If they go back and change frequency, they might need to manually adjust duration or we force reset?
-            // Let's allow force adjustment if current value matches OLD adjusted? No, too complex.
-            // Safe bet: auto-update only if undefined.
             if (val === undefined) {
                 setAnswers(prev => ({ ...prev, [key]: adjustedDuration }));
             }
         }
     }, [currentQ?.id, recommendation.recommendedSessionsPerWeek, adjustedDuration, answers]);
 
+    // --- VALIDATION HELPER ---
+    const getDurationValidation = () => {
+        if (currentQ?.id !== 'session_duration') return { status: 'ok', message: null };
+
+        const sessionsPerWeek = answers['sessions_per_week'] || recommendation.recommendedSessionsPerWeek;
+        const duration = answers['session_duration'] || 0;
+        const displayedDuration = duration || recommendation.recommendedSessionDurationMin;
+
+        const recommendedVolume = recommendation.recommendedSessionsPerWeek * recommendation.recommendedSessionDurationMin;
+        const userVolume = sessionsPerWeek * displayedDuration;
+
+        if (userVolume >= recommendedVolume * 0.95) {
+            return { status: 'ok', message: null };
+        }
+
+        const volumeRatio = userVolume / recommendation.targetWeeklyMinutes;
+        if (volumeRatio < 0.6) {
+            return {
+                status: 'error',
+                message: 'Avec cette fréquence et cette durée, il sera très difficile d’atteindre ton objectif dans les temps. Tu peux soit augmenter la durée de tes séances, soit revenir en arrière pour augmenter le nombre de séances.'
+            };
+        }
+        if (volumeRatio < 0.8) {
+            return {
+                status: 'warning',
+                message: 'C’est un peu léger pour ton objectif, mais ça reste jouable si tu es régulier.'
+            };
+        }
+        return { status: 'ok', message: null };
+    };
+
     const validation = getDurationValidation();
 
-    // --- VALIDATION & PROCEED LOGIC ---
     const isStepValid = () => {
         if (!currentQ) return false;
         const val = answers[currentQ.id];
 
-        // Specific Duration Validation
         if (currentQ.id === 'session_duration') {
-            // If validation is error AND not overridden
             if (validation.status === 'error' && !answers['lowVolumeOverride']) {
                 return false;
             }
@@ -834,19 +754,12 @@ export default function OnboardingPage() {
         }
     };
 
-    const canProceed = isStepValid();
-
     const handleNext = () => {
         if (currentStep < activeQuestions.length - 1) {
-            // SAVE COMPUTED DATA before moving on from specific steps? 
-            // Requirement: "À la fin de cette étape, on doit avoir stocké..."
             if (currentQ.id === 'session_duration') {
                 const sessions = answers['sessions_per_week'] || recommendation.recommendedSessionsPerWeek;
-                const duration = answers['session_duration'] || Math.max(10, Math.min(90, Math.round((recommendation.targetWeeklyMinutes / sessions) / 5) * 5));
+                const duration = answers['session_duration'] || adjustedDuration;
 
-                // We set these into answers silently to persist them
-                // Note: setAnswers is async, but we are moving next. 
-                // Better to set them NOW.
                 const extras = {
                     sessionsPerWeek: sessions,
                     sessionDurationMin: duration,
@@ -854,30 +767,21 @@ export default function OnboardingPage() {
                     targetWeeklyMinutes: recommendation.targetWeeklyMinutes,
                     recommendedSessionsPerWeek: recommendation.recommendedSessionsPerWeek,
                     recommendedSessionDurationMin: recommendation.recommendedSessionDurationMin,
-                    // lowVolumeOverride is already in answers if clicked
                 };
                 setAnswers(prev => ({ ...prev, ...extras }));
             }
-
             setCurrentStep(prev => prev + 1);
         } else {
-            // FINISHED
-            console.log("Onboarding Finished", answers);
-
-            // Persist full data including computed recommendations
             const finalData = {
                 ...answers,
                 algorithm_recommendations: {
                     recommended_sessions_per_week: recommendation.recommendedSessionsPerWeek,
                     recommended_session_duration_min: recommendation.recommendedSessionDurationMin,
                     target_weekly_minutes: recommendation.targetWeeklyMinutes,
-                    // volume match score will be computed in the final JSON builder or here
                 }
             };
-
             localStorage.setItem('huno-onboarding-data', JSON.stringify(finalData));
-            window.dispatchEvent(new Event('storage')); // Trigger update if listening
-
+            window.dispatchEvent(new Event('storage'));
             router.push('/');
         }
     };
@@ -894,20 +798,15 @@ export default function OnboardingPage() {
 
     const toggleMultiSelect = (val: string) => {
         const current = (answers[currentQ.id] as string[]) || [];
-
-        // Logic for "None" exclusive selection
         if (val === 'none') {
             if (current.includes('none')) {
-                setAnswer([]); // Deselect proper
+                setAnswer([]);
             } else {
-                setAnswer(['none']); // Select none, clear others
+                setAnswer(['none']);
             }
             return;
         }
-
-        // If selecting something else, remove "none"
         let newSelection = current.filter(v => v !== 'none');
-
         if (newSelection.includes(val)) {
             newSelection = newSelection.filter(v => v !== val);
         } else {
@@ -916,8 +815,6 @@ export default function OnboardingPage() {
         setAnswer(newSelection);
     };
 
-    // --- RENDERERS ---
-
     const renderInput = () => {
         const val = answers[currentQ.id];
 
@@ -925,7 +822,6 @@ export default function OnboardingPage() {
             case 'choice':
                 const mOptionsChoice = currentQ.options?.filter(opt => !['none', 'auter', 'Autre', 'other', 'unknown'].includes(opt.value)) || [];
                 const sOptionsChoice = currentQ.options?.filter(opt => ['none', 'auter', 'Autre', 'other', 'unknown'].includes(opt.value)) || [];
-
                 return (
                     <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
                         <div className="flex flex-wrap justify-center gap-3 md:gap-4 w-full">
@@ -958,14 +854,11 @@ export default function OnboardingPage() {
                         ))}
                     </div>
                 );
-
             case 'multi-choice':
                 const mainGoal = currentQ.excludeAnswerFrom ? answers[currentQ.excludeAnswerFrom] : null;
                 const filteredOptions = currentQ.options?.filter(o => o.value !== mainGoal) || [];
-
                 const mOptionsMulti = filteredOptions.filter(opt => !['none', 'auter', 'Autre', 'other', 'unknown'].includes(opt.value));
                 const sOptionsMulti = filteredOptions.filter(opt => ['none', 'auter', 'Autre', 'other', 'unknown'].includes(opt.value));
-
                 return (
                     <div className="flex flex-col gap-4 w-full">
                         <div className="flex flex-wrap justify-center gap-3 md:gap-4 w-full">
@@ -1009,13 +902,10 @@ export default function OnboardingPage() {
                         })}
                     </div>
                 );
-
             case 'date':
-                // Calculate min date (today + 30 days)
                 const minDate = new Date();
                 minDate.setDate(minDate.getDate() + 30);
                 const minDateStr = minDate.toISOString().split('T')[0];
-
                 return (
                     <div className="flex flex-col items-center animate-in zoom-in duration-300 gap-4">
                         <input
@@ -1030,26 +920,17 @@ export default function OnboardingPage() {
                         </p>
                     </div>
                 );
-
             case 'slider':
                 const isMaxed = currentQ.max && val >= currentQ.max && ['pushups_count', 'squats_count', 'plank_seconds'].includes(currentQ.id);
-
-                // DEFAULT VALUE LOGIC
                 let defaultVal = currentQ.min || 0;
-
                 if (currentQ.id === 'sessions_per_week') {
                     defaultVal = recommendation.recommendedSessionsPerWeek;
                 } else if (currentQ.id === 'session_duration') {
-                    // Use the dynamic adjusted duration (based on selected frequency)
                     defaultVal = adjustedDuration;
                 }
-
-                // If no value set, use default (visual)
                 const currentVal = val !== undefined ? val : defaultVal;
-
                 return (
                     <div className="w-full max-w-2xl mx-auto py-4 md:py-8">
-                        {/* Display Value */}
                         <div className="flex items-center justify-center gap-4 md:gap-8 mb-8 md:mb-12">
                             <button
                                 onClick={() => setAnswer(Math.max((currentQ.min || 0), currentVal - (currentQ.step || 1)))}
@@ -1057,7 +938,6 @@ export default function OnboardingPage() {
                             >
                                 <Minus className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
                             </button>
-
                             <div className="text-center min-w-[120px] md:min-w-[160px]">
                                 <span className={`text-6xl md:text-8xl font-black tracking-tighter relative ${isMaxed ? 'text-blue-400 drop-shadow-[0_0_20px_rgba(96,165,250,0.5)]' : 'text-white'}`}>
                                     {currentVal}
@@ -1065,7 +945,6 @@ export default function OnboardingPage() {
                                 </span>
                                 <span className="text-base md:text-xl text-gray-500 font-medium mt-2 block">{currentQ.unit}</span>
                             </div>
-
                             <button
                                 onClick={() => setAnswer(Math.min((currentQ.max || 100), currentVal + (currentQ.step || 1)))}
                                 className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center border border-white/10 transition-colors"
@@ -1073,8 +952,6 @@ export default function OnboardingPage() {
                                 <Plus className="w-6 h-6 text-gray-400" />
                             </button>
                         </div>
-
-                        {/* Range Slider */}
                         <div className="relative h-2 bg-white/10 rounded-full w-full">
                             <div
                                 className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all duration-150"
@@ -1082,7 +959,6 @@ export default function OnboardingPage() {
                                     width: `${((currentVal - (currentQ.min || 0)) / ((currentQ.max || 100) - (currentQ.min || 0))) * 100}%`
                                 }}
                             />
-                            {/* Slider Thumb */}
                             <div
                                 className="absolute top-1/2 -translate-y-1/2 w-6 h-6 bg-white rounded-full shadow-lg shadow-blue-500/50 pointer-events-none transition-all duration-75 border-2 border-blue-500"
                                 style={{
@@ -1100,16 +976,12 @@ export default function OnboardingPage() {
                                 className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
                             />
                         </div>
-
-                        {/* Maxed out message */}
                         {isMaxed && (
                             <div className="mt-6 flex items-center justify-center gap-2 text-green-400 animate-in fade-in slide-in-from-bottom-2">
                                 <Trophy className="w-5 h-5" />
                                 <span className="font-medium">Excellent niveau !</span>
                             </div>
                         )}
-
-                        {/* VALIDATION MESSAGES for Duration */}
                         {currentQ.id === 'session_duration' && validation.message && (
                             <div className={`mt-8 p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-bottom-2 ${validation.status === 'error'
                                 ? 'bg-red-500/10 border border-red-500/20 text-red-200'
@@ -1119,7 +991,6 @@ export default function OnboardingPage() {
                                 <p className="text-sm">{validation.message}</p>
                             </div>
                         )}
-
                         {currentQ.id === 'session_duration' && validation.status === 'error' && (
                             <div className="mt-4 flex justify-center">
                                 <button
@@ -1132,109 +1003,111 @@ export default function OnboardingPage() {
                         )}
                     </div>
                 );
-
             case 'body-map':
-                // ... (existing body map)
                 return (
                     <BodyMap
                         gender={answers['sex']?.startsWith('Femme') ? 'Femme' : 'Homme'}
                         selectedZones={val || []}
                         onToggleZone={(zone) => {
                             const current = val || [];
-                            if (current.includes(zone)) setAnswer(current.filter((z: string) => z !== zone));
-                            else setAnswer([...current, zone]);
+                            if (current.includes(zone)) {
+                                setAnswer(current.filter((z: string) => z !== zone));
+                            } else {
+                                setAnswer([...current, zone]);
+                            }
                         }}
                     />
                 );
-
             default:
                 return null;
         }
     };
 
+    if (!isLoaded) {
+        return (
+            <div className="h-screen w-full flex items-center justify-center bg-black">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            </div>
+        );
+    }
 
-
-    if (!isLoaded || !currentQ) return <div className="min-h-screen flex items-center justify-center text-white bg-[#09090b]"><Loader2 className="w-10 h-10 animate-spin text-blue-500" /></div>;
-
-    const progress = ((currentStep + 1) / activeQuestions.length) * 100;
+    if (!currentQ) return null;
 
     return (
-        <main className="h-[100dvh] bg-[#09090b] text-white flex flex-col relative overflow-hidden font-sans selection:bg-blue-500/30">
-            {/* ProgressBar */}
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-white/5 z-20">
-                <div
-                    className="h-full bg-gradient-to-r from-blue-600 via-purple-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_2s_linear_infinite]"
-                    style={{ width: `${progress}%`, transition: 'width 0.5s ease-out' }}
-                />
+        <main className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">
+            {/* Ambient Background */}
+            <div className="fixed inset-0 pointer-events-none">
+                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-900/10 blur-[120px] rounded-full" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-900/10 blur-[120px] rounded-full" />
             </div>
 
-            {/* Header */}
-            <div className="p-6 md:p-8 flex justify-between items-center z-10 shrink-0">
-                <button onClick={() => router.push('/')} className="p-3 hover:bg-white/5 rounded-full text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
-                    <X className="w-6 h-6" />
-                </button>
-                <div className="flex flex-col items-center gap-2">
-                    <img src="/logo.png" className="w-20 h-20 object-contain mb-2 opacity-90 hover:scale-105 transition-transform" alt="Logo" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">
-                        Question {currentStep + 1}
-                    </span>
-                    <span className="text-sm font-bold text-gray-400">{currentQ.section}</span>
-                </div>
-                <div className="w-12" /> {/* Spacer */}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-5xl mx-auto w-full z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto" key={currentQ.id}>
-                <div className="text-center mb-6 md:mb-12">
-                    <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400 tracking-tight leading-tight mb-4 drop-shadow-sm">
-                        {currentQ.title}
-                    </h1>
-                    {currentQ.subtitle && (
-                        <p className="text-lg md:text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed font-medium">
-                            {currentQ.subtitle}
-                        </p>
-                    )}
-                </div>
-
-                <div className="w-full">
-                    {renderInput()}
-                </div>
-            </div>
-
-            {/* Footer Controls */}
-            <div className="p-8 md:pb-12 flex justify-between items-center z-10 max-w-5xl mx-auto w-full mt-auto">
+            {/* Header / Progress */}
+            <header className="relative z-10 px-6 py-6 flex items-center justify-between">
                 <button
                     onClick={handlePrev}
                     disabled={currentStep === 0}
-                    className="flex items-center gap-3 text-gray-500 hover:text-white disabled:opacity-0 font-bold uppercase text-xs tracking-widest transition-all group"
+                    className={`p-2 rounded-full transition-colors ${currentStep === 0 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-white/10'}`}
                 >
-                    <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center group-hover:border-white/30 group-hover:bg-white/5 transition-all">
-                        <ChevronLeft className="w-4 h-4" />
-                    </div>
-                    <span>Retour</span>
+                    <ChevronLeft className="w-6 h-6" />
                 </button>
 
-                {currentQ.type !== 'choice' && (
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">
+                        {currentQ.section}
+                    </span>
+                    <div className="flex gap-1">
+                        {activeQuestions.map((_, i) => (
+                            <div
+                                key={i}
+                                className={`h-1 rounded-full transition-all duration-500 ${i === currentStep ? 'w-8 bg-blue-500' : 'w-2 bg-white/10'}`}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                <div className="w-10" /> {/* Spacer */}
+            </header>
+
+            {/* Main Content Area */}
+            <div className="flex-1 relative z-10 flex flex-col max-w-5xl mx-auto w-full px-6">
+                <div className="flex-1 flex flex-col justify-center items-center py-8">
+
+                    {/* Question Header */}
+                    <div className="text-center mb-8 md:mb-12 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                        <h1 className="text-3xl md:text-5xl font-black mb-4 tracking-tight leading-tight">
+                            {currentQ.title}
+                        </h1>
+                        {currentQ.subtitle && (
+                            <p className="text-lg md:text-xl text-gray-400 font-medium max-w-2xl mx-auto">
+                                {currentQ.subtitle}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Input Area */}
+                    <div className="w-full flex justify-center animate-in zoom-in-95 fade-in duration-500 delay-100">
+                        {renderInput()}
+                    </div>
+
+                </div>
+
+                {/* Footer Actions */}
+                <div className="py-8 flex justify-center">
                     <button
                         onClick={handleNext}
-                        disabled={!canProceed}
-                        className={`group flex items-center gap-4 pl-8 pr-2 py-2 rounded-full font-bold text-sm uppercase tracking-wider hover:scale-105 transition-all shadow-xl shadow-white/10 ${canProceed ? 'bg-white text-black cursor-pointer' : 'bg-white/20 text-gray-400 cursor-not-allowed grayscale'
-                            }`}
+                        disabled={!isStepValid()}
+                        className={`
+                            px-8 py-4 rounded-full font-bold text-lg flex items-center gap-2 transition-all duration-300
+                            ${isStepValid()
+                                ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 hover:scale-105'
+                                : 'bg-white/5 text-gray-500 cursor-not-allowed'
+                            }
+                        `}
                     >
-                        {currentStep === activeQuestions.length - 1 ? 'Terminer' : 'Suivant'}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${canProceed ? 'bg-black text-white group-hover:bg-blue-600' : 'bg-black/20 text-gray-500'
-                            }`}>
-                            <ChevronRight className="w-5 h-5" />
-                        </div>
+                        <span>{currentStep === activeQuestions.length - 1 ? 'Terminer' : 'Continuer'}</span>
+                        <ArrowRight className="w-5 h-5" />
                     </button>
-                )}
-            </div>
-
-            {/* Background Ambience */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-                <div className="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[120px]" />
-                <div className="absolute top-[40%] right-[-10%] w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[100px]" />
-                <div className="absolute bottom-[-10%] left-[20%] w-[800px] h-[400px] bg-indigo-600/10 rounded-full blur-[120px]" />
+                </div>
             </div>
         </main>
     );

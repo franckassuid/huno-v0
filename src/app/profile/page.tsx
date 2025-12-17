@@ -6,57 +6,29 @@ import {
     User, MapPin, TrendingUp, ChevronLeft, Loader2, Play, Database,
     Moon, Heart, Battery, Zap, Activity, Flame, LogOut
 } from 'lucide-react';
-import { buildHunoProfile, HunoProfile, generateFinalJson } from '../../lib/garmin-utils';
+import { HunoProfile } from '../../domain/types';
+import { generateFinalJson } from '../../services/garmin/transformer';
 import { InfoTooltip } from '../../components/InfoTooltip';
 import { MetricCard } from '../../components/MetricCard';
 import { CircularProgress } from '../../components/CircularProgress';
 import { TimeSeriesChart } from '../../components/TimeSeriesChart';
 
-import garminCache from '../../../garmin-cache.json';
-
 export default function Profile() {
     const router = useRouter();
     const [profile, setProfile] = useState<HunoProfile | null>(null);
-    const [rawData, setRawData] = useState<any>(null);
+    const [rawData, setRawData] = useState<any>(null); // Still useful for download
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
     useEffect(() => {
         async function fetchData() {
-            // 1. Check Demo Mode
-            const mode = localStorage.getItem('huno-mode');
-            if (mode === 'demo') {
-                try {
-                    const cacheAny = garminCache as any;
-                    const keys = Object.keys(cacheAny);
-                    if (keys.length > 0) {
-                        const rawData = cacheAny[keys[0]]?.data;
-                        if (rawData) {
-                            console.log("PROFILE: Loading Demo Data");
-                            const p = buildHunoProfile(rawData);
-                            setProfile(p);
-                            setRawData(rawData);
-                            setLoading(false);
-                            return;
-                        }
-                    }
-                    setError("Données démo introuvables");
-                    setLoading(false);
-                    return;
-                } catch (e) {
-                    setError("Erreur chargement démo");
-                    setLoading(false);
-                    return;
-                }
-            }
-
-            // 1.5 Try Cache (Live Mode)
+            // 1. Try Cache 
             try {
                 const cached = localStorage.getItem('huno-data-cache');
                 if (cached) {
                     const json = JSON.parse(cached);
-                    console.log("PROFILE: Loading from Cache (No Fetch)");
-                    setProfile(buildHunoProfile(json));
+                    console.log("PROFILE: Loading from Cache");
+                    setProfile(json);
                     setRawData(json);
                     setLoading(false);
                     return;
@@ -80,8 +52,7 @@ export default function Profile() {
 
                 const json = await res.json();
                 console.log("🔥 GARMIN API RESPONSE (Profile Fetch):", json);
-                const p = buildHunoProfile(json);
-                setProfile(p);
+                setProfile(json); // Already shaped
                 setRawData(json);
             } catch (e: any) {
                 console.error(e);
@@ -163,7 +134,7 @@ export default function Profile() {
                             if (local) onboardingData = JSON.parse(local);
                         } catch (e) { }
 
-                        const finalJson = generateFinalJson(profile, onboardingData, rawData?.cardio?.activities);
+                        const finalJson = generateFinalJson(profile, onboardingData);
 
                         const notif = document.createElement('div');
                         notif.className = 'fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200';
@@ -232,14 +203,18 @@ export default function Profile() {
                     </div>
 
                     <div className="flex flex-wrap justify-center md:justify-start gap-3">
-                        {/* Existing badges ... */}
-                        <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm font-medium">
-                            <TrendingUp className="w-4 h-4" />
-                            Niveau {profile.garminMeta.userLevel}
-                        </span>
-                        <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm font-medium">
-                            {profile.garminMeta.userPoints} Points
-                        </span>
+                        {/* Gamification Data */}
+                        {profile.garminMeta.userLevel !== null && (
+                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm font-medium">
+                                <TrendingUp className="w-4 h-4" />
+                                Niveau {profile.garminMeta.userLevel}
+                            </span>
+                        )}
+                        {profile.garminMeta.userPoints !== null && (
+                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm font-medium">
+                                {profile.garminMeta.userPoints} Points
+                            </span>
+                        )}
                     </div>
 
                     {/* Devices list */}
@@ -368,56 +343,60 @@ export default function Profile() {
                 </div>
 
                 {/* Body Battery & Stress */}
-                <div className="md:col-span-1 flex flex-col gap-6">
+                <div className="md:col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Body Battery */}
-                    <div className="glass-card flex-1 p-4 flex flex-col items-center justify-center relative overflow-visible group">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-transparent opacity-50" />
-
-                        <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase mb-4 w-full px-2">
-                            <Battery className="w-4 h-4" />
-                            <span>Body Battery</span>
-                            <InfoTooltip text="Estime vos réserves d'énergie personnelles (0-100%) en fonction du stress et du repos." />
-                        </div>
-
-                        <CircularProgress
-                            value={profile.wellnessStatus.bodyBattery && profile.wellnessStatus.bodyBattery[0]?.bodyBatteryValuesArray
-                                ? profile.wellnessStatus.bodyBattery[0].bodyBatteryValuesArray.slice(-1)[0][1]
-                                : (profile.wellnessStatus.bodyBattery?.[0]?.bodyBatteryLevelValue ?? 0)}
-                            color="text-blue-500"
-                        >
-                            <span className="text-3xl font-black">
-                                {profile.wellnessStatus.bodyBattery && profile.wellnessStatus.bodyBattery[0]?.bodyBatteryValuesArray
-                                    ? profile.wellnessStatus.bodyBattery[0].bodyBatteryValuesArray.slice(-1)[0][1]
-                                    : (profile.wellnessStatus.bodyBattery?.[0]?.bodyBatteryLevelValue ?? '--')}
-                            </span>
-                            <span className="text-xs text-gray-400 font-bold uppercase">%</span>
-                        </CircularProgress>
-                    </div>
+                    <MetricCard
+                        title="Body Battery"
+                        icon={Battery}
+                        value={Array.isArray(profile.wellnessStatus.bodyBattery) && profile.wellnessStatus.bodyBattery.length > 0
+                            ? profile.wellnessStatus.bodyBattery[profile.wellnessStatus.bodyBattery.length - 1].val
+                            : '--'}
+                        unit="%"
+                        colorClass="text-blue-400"
+                        bgGradient="from-blue-500/10 to-transparent hover:from-blue-500/20"
+                        tooltip="Estime vos réserves d'énergie personnelles (0-100%) en fonction du stress et du repos."
+                        graph={
+                            <div className="h-24">
+                                <TimeSeriesChart
+                                    data={Array.isArray(profile.wellnessStatus.bodyBattery)
+                                        ? profile.wellnessStatus.bodyBattery.map((p: any) => [p.date, p.val])
+                                        : []}
+                                    color="#60a5fa" // blue-400
+                                    unit="%"
+                                    minY={0}
+                                    maxY={100}
+                                    height={80}
+                                />
+                            </div>
+                        }
+                    />
 
                     {/* Stress */}
-                    <div className="glass-card flex-1 p-4 flex flex-col items-center justify-center relative overflow-visible group">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-transparent opacity-50" />
-
-                        <div className="flex items-center gap-2 text-orange-400 text-xs font-bold uppercase mb-4 w-full px-2">
-                            <Zap className="w-4 h-4" />
-                            <span>Stress</span>
-                            <InfoTooltip text="Niveau de stress physiologique (0-100) basé sur la variabilité de votre fréquence cardiaque." />
-                        </div>
-
-                        <CircularProgress
-                            value={profile.wellnessStatus.stress && profile.wellnessStatus.stress[0]?.stressValuesArray
-                                ? profile.wellnessStatus.stress[0].stressValuesArray.slice(-1)[0][1]
-                                : (profile.wellnessStatus.stress?.[0]?.averageStressLevel ?? 0)}
-                            color="text-orange-500"
-                        >
-                            <span className="text-3xl font-black">
-                                {profile.wellnessStatus.stress && profile.wellnessStatus.stress[0]?.stressValuesArray
-                                    ? profile.wellnessStatus.stress[0].stressValuesArray.slice(-1)[0][1]
-                                    : (profile.wellnessStatus.stress?.[0]?.averageStressLevel ?? '--')}
-                            </span>
-                            <span className="text-xs text-gray-400 font-bold uppercase">/ 100</span>
-                        </CircularProgress>
-                    </div>
+                    <MetricCard
+                        title="Stress"
+                        icon={Zap}
+                        value={Array.isArray(profile.wellnessStatus.stress) && profile.wellnessStatus.stress.length > 0
+                            ? profile.wellnessStatus.stress[profile.wellnessStatus.stress.length - 1].y
+                            : '--'}
+                        unit="/ 100"
+                        colorClass="text-orange-400"
+                        bgGradient="from-orange-500/10 to-transparent hover:from-orange-500/20"
+                        tooltip="Niveau de stress physiologique (0-100) basé sur la variabilité de votre fréquence cardiaque."
+                        graph={
+                            <div className="h-24">
+                                <TimeSeriesChart
+                                    data={Array.isArray(profile.wellnessStatus.stress)
+                                        ? profile.wellnessStatus.stress.map((p: any) => [p.x, p.y])
+                                        : []}
+                                    color="#fb923c" // orange-400
+                                    unit=""
+                                    minY={0}
+                                    maxY={100}
+                                    height={80}
+                                />
+                            </div>
+                        }
+                    />
                 </div>
 
                 {/* VO2 Max */}

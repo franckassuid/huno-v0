@@ -7,12 +7,11 @@ import {
   Moon, Heart, Battery, Zap, Activity, Flame, Footprints, Settings,
   Calendar, Timer, Dumbbell
 } from 'lucide-react';
-import garminCache from '../../garmin-cache.json';
-import { buildHunoProfile, generateFinalJson, HunoProfile } from '../lib/garmin-utils';
+import { HunoProfile } from '../domain/types';
 import { InfoTooltip } from '../components/InfoTooltip';
 import { CircularProgress } from '../components/CircularProgress';
 import { MetricCard } from '../components/MetricCard';
-import { HeartRateChart } from '../components/HeartRateChart';
+import { MOCK_PROFILE } from '../services/huno-mock';
 
 export default function Home() {
   const router = useRouter();
@@ -29,36 +28,18 @@ export default function Home() {
   useEffect(() => {
     // Auth persistence check
     const mode = localStorage.getItem('huno-mode');
-    if (mode === 'demo') {
-      activateDemoMode();
-    } else if (mode === 'live') {
-      // Try local cache first
+
+    if (mode === 'live') {
       try {
         const cached = localStorage.getItem('huno-data-cache');
         if (cached) {
           const json = JSON.parse(cached);
-          console.log("🔥 LOADING FROM CACHE (No Fetch)");
-          setHunoProfile(buildHunoProfile(json));
+          console.log("🔥 LOADING FROM CACHE");
+          setHunoProfile(json); // Already shaped
           setIsAuthenticated(true);
-          return; // Stop here, no need to fetch
+          return;
         }
       } catch (e) { }
-
-      setIsRestoring(true);
-      fetch('/api/garmin/data', { method: 'POST', body: JSON.stringify({}) })
-        .then(async res => {
-          if (res.ok) {
-            const json = await res.json();
-            console.log("🔥 GARMIN API RESPONSE (Session Restore):", json);
-            setHunoProfile(buildHunoProfile(json));
-            setIsAuthenticated(true);
-            localStorage.setItem('huno-data-cache', JSON.stringify(json));
-          } else {
-            localStorage.removeItem('huno-mode');
-          }
-        })
-        .catch(() => localStorage.removeItem('huno-mode'))
-        .finally(() => setIsRestoring(false));
     }
 
     const savedEmail = localStorage.getItem('huno-saved-email');
@@ -89,7 +70,7 @@ export default function Home() {
       if (!res.ok) throw new Error(json.error || 'Login failed');
 
       console.log("🔥 GARMIN API RESPONSE (Login):", json);
-      setHunoProfile(buildHunoProfile(json));
+      setHunoProfile(json);
       setIsAuthenticated(true);
       localStorage.setItem('huno-mode', 'live');
       localStorage.setItem('huno-data-cache', JSON.stringify(json));
@@ -100,21 +81,17 @@ export default function Home() {
     }
   };
 
-  const activateDemoMode = () => {
-    try {
-      const cacheAny = garminCache as any;
-      const keys = Object.keys(cacheAny);
-      if (keys.length > 0) {
-        const rawData = cacheAny[keys[0]]?.data;
-        if (rawData) {
-          setHunoProfile(buildHunoProfile(rawData));
-          setIsAuthenticated(true);
-          localStorage.setItem('huno-mode', 'demo');
-        }
-      }
-    } catch (e: any) {
-      setError(e.message);
-    }
+  const handleDemoLogin = () => {
+    setLoading(true);
+    setTimeout(() => {
+      console.log("🔥 STARTING DEMO MODE");
+      const demoData = MOCK_PROFILE;
+      setHunoProfile(demoData);
+      setIsAuthenticated(true);
+      localStorage.setItem('huno-mode', 'demo');
+      localStorage.setItem('huno-data-cache', JSON.stringify(demoData));
+      setLoading(false);
+    }, 800);
   };
 
   const formatDuration = (seconds?: number | null) => {
@@ -156,7 +133,21 @@ export default function Home() {
               </div>
               {error && <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">{error}</div>}
               <button type="submit" disabled={loading} className="btn-primary w-full">{loading ? <Loader2 className="animate-spin" /> : "Connexion"}</button>
-              <button type="button" onClick={activateDemoMode} className="btn-secondary w-full">Mode Démo</button>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-white/10"></div>
+                <span className="flex-shrink-0 mx-4 text-gray-500 text-xs uppercase">Ou</span>
+                <div className="flex-grow border-t border-white/10"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                className="w-full py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 font-bold transition-all flex items-center justify-center gap-2 hover:text-white group"
+              >
+                <Database className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
+                Mode Démo
+              </button>
             </form>
           </div>
         </div>
@@ -176,9 +167,13 @@ export default function Home() {
           <div className="relative cursor-pointer group" onClick={() => router.push('/profile')}>
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 p-0.5 ring-2 ring-white/10 group-hover:ring-white/30 transition-all">
               <div className="w-full h-full rounded-full bg-[#09090b] flex items-center justify-center overflow-hidden">
-                {hunoProfile.identity.fullName ? (
-                  <span className="text-lg font-bold text-white">{hunoProfile.identity.fullName.charAt(0)}</span>
-                ) : <User className="text-gray-400 w-5 h-5" />}
+                {hunoProfile.identity.profileImageUrl ? (
+                  <img src={hunoProfile.identity.profileImageUrl} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  hunoProfile.identity.fullName ? (
+                    <span className="text-lg font-bold text-white">{hunoProfile.identity.fullName.charAt(0)}</span>
+                  ) : <User className="text-gray-400 w-5 h-5" />
+                )}
               </div>
             </div>
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#09090b] rounded-full"></div>
@@ -280,9 +275,10 @@ export default function Home() {
               <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Body Battery</span>
               <div className="flex items-end gap-1">
                 <span className="text-lg font-bold text-blue-400 leading-none">
-                  {hunoProfile.wellnessStatus.bodyBattery && hunoProfile.wellnessStatus.bodyBattery[0]?.bodyBatteryValuesArray
-                    ? hunoProfile.wellnessStatus.bodyBattery[0].bodyBatteryValuesArray.slice(-1)[0][1]
-                    : (hunoProfile.wellnessStatus.bodyBattery?.[0]?.bodyBatteryLevelValue ?? '--')}
+                  {/* Access refined Clean Architecture structure: Array of { date, val } */}
+                  {Array.isArray(hunoProfile.wellnessStatus.bodyBattery) && hunoProfile.wellnessStatus.bodyBattery.length > 0
+                    ? hunoProfile.wellnessStatus.bodyBattery[hunoProfile.wellnessStatus.bodyBattery.length - 1].val
+                    : '--'}
                 </span>
                 <span className="text-xs text-blue-500/60 font-medium mb-0.5">%</span>
               </div>

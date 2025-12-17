@@ -70,15 +70,15 @@ def main():
         # Fetching Daily Stats (Steps, RHR, Stress Avg, Sleep)
         # We'll stick to 'today' high res, and 'history' array of summaries.
         
-        for d in range_7d: # Fetching last 7 days for graphs
+        for d in range_28d: # Fetching 28 days for trends (especially HRV)
             d_str = d.isoformat()
             try:
                 # get_stats returns a lot of daily summary info (steps, rhr, stress, etc)
                 day_stats = garmin.get_stats(d_str)
-                # sleep score?
-                # day_sleep = garmin.get_sleep_data(d_str) 
-                # HRV?
+                
+                # HRV
                 try:
+                    # check if get_hrv_data is available and returns valid data
                     day_hrv = garmin.get_hrv_data(d_str)
                 except:
                     day_hrv = None
@@ -89,7 +89,8 @@ def main():
                     "hrv": day_hrv
                 })
             except Exception as e:
-                print(f"Error fetching stats for {d_str}: {e}")
+                # print(f"Error fetching stats for {d_str}: {e}", file=sys.stderr)
+                pass
 
         # Current Day High Res
         steps = garmin.get_steps_data(today_str)
