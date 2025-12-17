@@ -11,8 +11,16 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { email, password } = body;
 
+        // Extract relevant headers to forward (Cookies for Vercel Auth, etc.)
+        const headers: Record<string, string> = {};
+        request.headers.forEach((value, key) => {
+            if (['cookie', 'x-vercel-protection-bypass', 'x-vercel-set-bypass-cookie'].includes(key.toLowerCase())) {
+                headers[key] = value;
+            }
+        });
+
         console.log("[API] Fetching Garmin data...");
-        const rawJson = await fetchGarminDataFromPython(email, password);
+        const rawJson = await fetchGarminDataFromPython(email, password, headers);
 
         // DEBUG: Write raw JSON to file
         try {

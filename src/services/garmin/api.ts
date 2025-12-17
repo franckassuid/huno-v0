@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 
-export async function fetchGarminDataFromPython(email?: string, password?: string): Promise<any> {
+export async function fetchGarminDataFromPython(email?: string, password?: string, requestHeaders: HeadersInit = {}): Promise<any> {
 
     // Check if running on Vercel (Production/Preview)
     // VERCEL_URL is automatically set by Vercel
@@ -12,9 +12,20 @@ export async function fetchGarminDataFromPython(email?: string, password?: strin
         console.log("🚀 VERCEL DETECTED: Fetching from Python Serverless Function:", url);
 
         try {
+            // Forward authentication cookies/headers to bypass Vercel Protection
+            // We create a new headers object merging the content-type and provided headers
+            const fetchHeaders: any = {
+                'Content-Type': 'application/json',
+                ...requestHeaders
+            };
+
+            // Remove host header to avoid conflicts
+            if (fetchHeaders['host']) delete fetchHeaders['host'];
+            if (fetchHeaders['content-length']) delete fetchHeaders['content-length'];
+
             const res = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: fetchHeaders,
                 body: JSON.stringify({ email, password })
             });
 
